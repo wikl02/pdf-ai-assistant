@@ -1,6 +1,8 @@
+import hashlib
 import os
 import re
 from bisect import bisect_right
+from io import BytesIO
 
 import streamlit as st
 from dotenv import load_dotenv
@@ -32,9 +34,10 @@ st.session_state.setdefault("messages", [])
 st.session_state.setdefault("active_file", None)
 
 uploaded_file = st.file_uploader("上传一个 PDF 文件", type=["pdf"])
+uploaded_file_bytes = uploaded_file.getvalue() if uploaded_file else None
 
 if uploaded_file:
-    file_identity = (uploaded_file.name, uploaded_file.size)
+    file_identity = hashlib.sha256(uploaded_file_bytes).hexdigest()
     if st.session_state.active_file != file_identity:
         st.session_state.active_file = file_identity
         st.session_state.messages = []
@@ -45,8 +48,9 @@ with st.form("question_form"):
     question = st.text_input("请输入你想问 PDF 的问题")
     submitted = st.form_submit_button("提交问题", type="primary")
 
-def extract_pdf_pages(file):
-    reader = PdfReader(file)
+@st.cache_data(max_entries=10)
+def extract_pdf_pages(file_bytes):
+    reader = PdfReader(BytesIO(file_bytes))
 
     if reader.is_encrypted:
         raise ValueError("PDF is encrypted")
@@ -80,6 +84,7 @@ def build_pdf_text(pages):
     return "\n\n".join(page_sections)
 
 
+@st.cache_data(max_entries=10)
 def split_pdf_pages(pages, chunk_size=CHUNK_SIZE, overlap=CHUNK_OVERLAP):
     chunks = []
 
@@ -162,7 +167,7 @@ def retrieve_relevant_chunks(chunks, question, top_k=TOP_K):
             scored_chunks.append({**chunk, "score": score})
 
     if not scored_chunks:
-        return [{**chunk, "score": 0} for chunk in chunks[:top_k]]
+        return []
 
     scored_chunks.sort(key=lambda chunk: (-chunk["score"], chunk["id"]))
     return scored_chunks[:top_k]
@@ -232,7 +237,7 @@ def ask_ai(context_text, user_question):
         if "timeout" in error_text or "connection" in error_text:
             return "连接 DeepSeek 服务失败，请检查网络后重试。"
 
-        return f"AI 服务暂时不可用，请稍后再试。错误信息：{e}"
+        return "AI 服务暂时不可用，请稍后再试。"
 
 
 if submitted and not uploaded_file:
@@ -241,7 +246,7 @@ if submitted and not uploaded_file:
 if uploaded_file:
     try:
         with st.spinner("正在读取 PDF..."):
-            pdf_pages = extract_pdf_pages(uploaded_file)
+            pdf_pages = extract_pdf_pages(uploaded_file_bytes)
             pdf_text = build_pdf_text(pdf_pages)
     except Exception as e:
         error_text = str(e).lower()
@@ -271,13 +276,19 @@ if uploaded_file:
                 relevant_chunks = retrieve_relevant_chunks(
                     text_chunks, question_text
                 )
-                context_text = build_context(relevant_chunks)
                 st.session_state.messages.append(
                     {"role": "user", "content": question_text}
                 )
 
-                with st.spinner("AI 正在思考..."):
-                    answer = ask_ai(context_text, question_text)
+                if relevant_chunks:
+                    context_text = build_context(relevant_chunks)
+                    with st.spinner("AI 正在思考..."):
+                        answer = ask_ai(context_text, question_text)
+                else:
+                    answer = (
+                        "没有在 PDF 中检索到与问题相关的内容，"
+                        "因此本次没有调用 AI。请换一种问法，或确认 PDF 中是否包含相关信息。"
+                    )
 
                 st.session_state.messages.append(
                     {

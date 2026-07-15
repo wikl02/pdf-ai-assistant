@@ -4,4 +4,7 @@
 __pycache__/
 *.pyc
 .streamlit/secrets.toml
-
+.agents/
+.claude/
+output/
+tmp/
