@@ -16,6 +16,7 @@
 - 调用 DeepSeek API 生成文档问答结果
 - 回答时展示来源文档、页码、段落、行号或表格行号
 - 支持聊天记录展示和清空
+- 支持用户名和密码登录保护，避免公开链接被随意使用
 - 使用 SHA-256 识别当前知识库文件集合
 - 未检索到相关内容时不调用 AI，减少无效 token 消耗
 - 对 API Key 无效、余额不足、限流、网络失败等情况进行友好提示
@@ -39,6 +40,7 @@
 pdf-ai-assistant/
 ├── app.py
 ├── config.py
+├── auth.py
 ├── document_loader.py
 ├── text_splitter.py
 ├── vector_store.py
@@ -55,6 +57,7 @@ pdf-ai-assistant/
 
 - `app.py`：Streamlit 页面入口，负责上传、提问、结果展示和聊天记录
 - `config.py`：项目配置项，例如分块大小、模型名称、支持文件类型
+- `auth.py`：用户名和密码登录模块，支持从环境变量或 Streamlit Secrets 读取账号配置
 - `document_loader.py`：文档解析模块，负责 PDF、TXT、Markdown、DOCX、CSV、XLSX 文本提取
 - `text_splitter.py`：文本分块和来源位置格式化模块
 - `vector_store.py`：Embedding 模型加载、Chroma 入库和向量检索模块
@@ -91,6 +94,8 @@ pip install -r requirements.txt
 
 ```env
 DEEPSEEK_API_KEY=你的 DeepSeek API Key
+APP_USERNAME=你的访问用户名
+APP_PASSWORD=你的访问密码
 ```
 
 注意：`.env` 文件包含敏感信息，不要上传到 GitHub。
@@ -99,6 +104,16 @@ DEEPSEEK_API_KEY=你的 DeepSeek API Key
 
 ```env
 DEEPSEEK_API_KEY=your_api_key_here
+APP_USERNAME=your_demo_username_here
+APP_PASSWORD=your_demo_password_here
+```
+
+如果部署到 Streamlit Community Cloud，需要在应用的 Secrets 中配置：
+
+```toml
+DEEPSEEK_API_KEY = "你的 DeepSeek API Key"
+APP_USERNAME = "你的访问用户名"
+APP_PASSWORD = "你的访问密码"
 ```
 
 ## 运行项目

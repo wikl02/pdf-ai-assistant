@@ -1,6 +1,7 @@
 from dotenv import load_dotenv
 import streamlit as st
 
+from auth import require_login
 from config import SUPPORTED_FILE_TYPES
 from document_loader import (
     build_file_infos,
@@ -17,6 +18,8 @@ load_dotenv()
 
 st.set_page_config(page_title="企业知识库智能助手", layout="wide")
 st.title("企业知识库智能助手")
+
+require_login()
 
 st.session_state.setdefault("messages", [])
 st.session_state.setdefault("active_knowledge_base", None)
