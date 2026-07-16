@@ -435,8 +435,20 @@ def build_context(chunks):
     return "\n\n".join(context_sections)
 
 
-def ask_ai(context_text, user_question):
+def get_deepseek_api_key():
     api_key = os.getenv("DEEPSEEK_API_KEY")
+
+    if api_key:
+        return api_key
+
+    try:
+        return st.secrets["DEEPSEEK_API_KEY"]
+    except Exception:
+        return None
+
+
+def ask_ai(context_text, user_question):
+    api_key = get_deepseek_api_key()
 
     if not api_key:
         return "还没有配置 DEEPSEEK_API_KEY。你可以先完成知识库上传和检索，下一步再接入 AI。"
