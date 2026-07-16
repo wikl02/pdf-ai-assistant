@@ -8,3 +8,4 @@ __pycache__/
 .claude/
 output/
 tmp/
+.chroma_db/

@@ -1,29 +1,34 @@
-# 智能 PDF 知识库问答助手
+# 企业知识库智能助手
 
-这是一个基于 Streamlit 的轻量级 PDF 知识库问答项目。用户可以上传 PDF 文件，系统会提取 PDF 文本，将内容切分为多个文本块，并根据用户问题进行关键词检索，再调用 DeepSeek API 生成基于文档内容的回答。
+这是一个基于 Streamlit、Embedding、Chroma 向量数据库和 DeepSeek API 的企业知识库问答项目。用户可以同时上传多种格式的文档，系统会解析文档内容、切分文本块、生成向量并写入 Chroma，然后根据用户问题进行语义检索，最后调用 DeepSeek 基于检索结果生成回答。
 
-项目适合作为 AI 应用开发入门作品，也可以作为简历中的 RAG 问答项目原型。
+项目可以作为企业知识库智能助手的 MVP 原型，也适合作为 AI 应用开发、RAG、向量检索方向的简历项目。
 
 ## 功能特点
 
-- 上传 PDF 文件并提取文本内容
-- 自动判断扫描版或无法提取文字的 PDF
-- 将 PDF 文本按块切分，降低一次性输入过长的问题
-- 根据用户问题进行关键词检索，筛选相关文本块
-- 调用 DeepSeek API 进行文档问答
-- 回答时提示信息来源，包含页码和行号范围
-- 支持聊天记录展示
-- 支持清空聊天记录
-- 使用 Streamlit 缓存机制减少重复 PDF 解析
-- 使用 SHA-256 文件指纹识别上传的 PDF
+- 支持多文档同时上传
+- 支持 PDF、TXT、Markdown、DOCX、CSV、XLSX
+- 自动解析不同格式文档内容
+- 将文档内容切分为文本块
+- 使用 sentence-transformers 生成 Embedding 向量
+- 使用 Chroma 持久化存储向量
+- 根据用户问题进行向量相似度检索
+- 调用 DeepSeek API 生成文档问答结果
+- 回答时展示来源文档、页码、段落、行号或表格行号
+- 支持聊天记录展示和清空
+- 使用 SHA-256 识别当前知识库文件集合
 - 未检索到相关内容时不调用 AI，减少无效 token 消耗
-- 对常见 API 异常进行友好提示，例如余额不足、Key 无效、请求限流、网络连接失败等
+- 对 API Key 无效、余额不足、限流、网络失败等情况进行友好提示
 
 ## 技术栈
 
 - Python
 - Streamlit
 - pypdf
+- python-docx
+- openpyxl
+- sentence-transformers
+- Chroma
 - DeepSeek API
 - OpenAI Python SDK
 - python-dotenv
@@ -35,6 +40,7 @@ pdf-ai-assistant/
 ├── app.py
 ├── requirements.txt
 ├── README.md
+├── PROJECT_PROGRESS.md
 ├── .env.example
 └── .gitignore
 ```
@@ -44,8 +50,11 @@ pdf-ai-assistant/
 - `app.py`：项目主程序
 - `requirements.txt`：项目依赖列表
 - `README.md`：项目说明文档
+- `PROJECT_PROGRESS.md`：学习和开发进度记录
 - `.env.example`：环境变量示例文件，不存放真实 API Key
-- `.gitignore`：Git 忽略规则，避免上传 `.env`、虚拟环境等本地文件
+- `.gitignore`：Git 忽略规则，避免上传 `.env`、虚拟环境和本地向量库
+
+本地运行后会生成 `.chroma_db/`，这是 Chroma 的本地向量数据库目录，不应该上传到 GitHub。
 
 ## 环境准备
 
@@ -96,30 +105,42 @@ http://localhost:8501
 
 ## 使用流程
 
-1. 上传一个 PDF 文件
-2. 等待系统读取并提取 PDF 文本
+1. 上传一个或多个知识库文档
+2. 等待系统解析文档并写入 Chroma 向量数据库
 3. 在输入框中输入问题
 4. 点击“提交问题”
-5. 查看 AI 回答和检索到的相关文本来源
+5. 查看 AI 回答和检索到的来源文本块
 
 ## 当前版本说明
 
-当前版本采用关键词检索方式筛选相关 PDF 文本块，适合作为 RAG 问答项目的入门版本。
+当前版本已经从单 PDF 问答助手升级为多文档企业知识库智能助手 MVP。
 
-应用已加入 PDF 解析缓存和文件指纹识别，同一个 PDF 在多轮提问时不会重复解析；如果没有检索到相关文本块，系统会直接提示用户，不会继续调用 AI。
+当前支持的知识库流程：
 
-页码和行号基于 PDF 提取后的文本计算，可能与复杂排版 PDF 中的视觉行号略有差异。
+```text
+多文档上传
+-> 文档解析
+-> 文本分块
+-> Embedding 向量化
+-> Chroma 向量入库
+-> 问题向量检索
+-> DeepSeek 生成回答
+-> 来源文档展示
+```
+
+PDF 页码和行号基于提取后的文本计算，可能与复杂排版中的视觉行号略有差异。扫描版 PDF 暂时需要后续加入 OCR。
 
 ## 后续优化方向
 
-- 接入向量数据库，例如 Chroma 或 FAISS
-- 使用 Embedding 进行语义检索
-- 支持多 PDF 文档管理
-- 增加 OCR 能力，支持扫描版 PDF
-- 增加用户登录和历史记录持久化
-- 优化前端界面和交互体验
-- 增加单元测试和部署说明
+- 增加 OCR，支持扫描版 PDF
+- 增加文档删除和重新构建索引功能
+- 支持知识库历史持久化管理
+- 支持多知识库切换
+- 增加用户登录和权限控制
+- 部署到 Streamlit Community Cloud 或云服务器
+- 后续重构为 FastAPI + React 前后端分离架构
 
 ## 简历描述参考
 
-智能 PDF 知识库问答助手：基于 Python、Streamlit、pypdf 和 DeepSeek API 开发的 PDF 问答应用，实现 PDF 文本提取、文本分块、关键词检索、来源标注、聊天记录和 API 异常处理；使用缓存机制优化 PDF 解析流程，并通过 SHA-256 文件指纹识别文档状态，完成了轻量级 RAG 问答原型。
+企业知识库智能助手：基于 Python、Streamlit、Chroma、sentence-transformers 和 DeepSeek API 开发的多文档 RAG 问答应用，支持 PDF、TXT、Markdown、DOCX、CSV、XLSX 等多种文档格式，实现文档解析、文本分块、Embedding 向量化、Chroma 向量检索、来源标注、聊天记录和 API 异常处理，完成企业知识库智能助手 MVP。
+
