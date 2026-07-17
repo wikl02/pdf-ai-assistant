@@ -1,8 +1,6 @@
-import os
+﻿from openai import OpenAI
 
-import streamlit as st
-from openai import OpenAI
-
+from settings import get_secret_value
 from text_splitter import format_location
 
 
@@ -23,15 +21,7 @@ def build_context(chunks):
 
 
 def get_deepseek_api_key():
-    api_key = os.getenv("DEEPSEEK_API_KEY")
-
-    if api_key:
-        return api_key
-
-    try:
-        return st.secrets["DEEPSEEK_API_KEY"]
-    except Exception:
-        return None
+    return get_secret_value("DEEPSEEK_API_KEY")
 
 
 def ask_ai(context_text, user_question):

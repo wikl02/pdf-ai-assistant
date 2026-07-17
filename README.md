@@ -25,6 +25,7 @@
 
 - Python
 - Streamlit
+- FastAPI
 - pypdf
 - python-docx
 - openpyxl
@@ -33,6 +34,7 @@
 - DeepSeek API
 - OpenAI Python SDK
 - python-dotenv
+- requests
 
 ## 项目结构
 
@@ -45,6 +47,9 @@ pdf-ai-assistant/
 ├── text_splitter.py
 ├── vector_store.py
 ├── llm_client.py
+├── backend/
+│   ├── __init__.py
+│   └── main.py
 ├── sample_documents/
 ├── requirements.txt
 ├── README.md
@@ -62,6 +67,7 @@ pdf-ai-assistant/
 - `text_splitter.py`：文本分块和来源位置格式化模块
 - `vector_store.py`：Embedding 模型加载、Chroma 入库和向量检索模块
 - `llm_client.py`：DeepSeek API 调用和提示词上下文构建模块
+- `backend/main.py`：FastAPI 后端入口，提供登录、文档上传、知识库问答等接口
 - `sample_documents/`：本地测试用示例文档
 - `requirements.txt`：项目依赖列表
 - `README.md`：项目说明文档
@@ -106,6 +112,7 @@ APP_PASSWORD=你的访问密码
 DEEPSEEK_API_KEY=your_api_key_here
 APP_USERNAME=your_demo_username_here
 APP_PASSWORD=your_demo_password_here
+FASTAPI_BASE_URL=http://localhost:8000
 ```
 
 如果部署到 Streamlit Community Cloud，需要在应用的 Secrets 中配置：
@@ -118,6 +125,8 @@ APP_PASSWORD = "你的访问密码"
 
 ## 运行项目
 
+### 运行 Streamlit 版本
+
 在项目根目录执行：
 
 ```powershell
@@ -128,6 +137,29 @@ python -m streamlit run app.py
 
 ```text
 http://localhost:8501
+```
+
+### 运行 FastAPI 后端版本
+
+在项目根目录执行：
+
+```powershell
+python -m uvicorn backend.main:app --reload --port 8000
+```
+
+运行成功后，可以打开接口文档：
+
+```text
+http://localhost:8000/docs
+```
+
+当前 FastAPI 后端已提供：
+
+```text
+GET /health       健康检查
+POST /login       用户名密码登录，返回 access_token
+POST /upload      上传文档并构建 Chroma 知识库
+POST /ask         基于指定知识库提问
 ```
 
 ## 系统流程图

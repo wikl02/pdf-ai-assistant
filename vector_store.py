@@ -1,16 +1,17 @@
+﻿from functools import lru_cache
+
 import chromadb
-import streamlit as st
 from sentence_transformers import SentenceTransformer
 
 from config import CHROMA_DB_PATH, EMBEDDING_MODEL_NAME, SIMILARITY_THRESHOLD, TOP_K
 
 
-@st.cache_resource(show_spinner="正在加载向量模型，首次运行可能需要 1-3 分钟...")
+@lru_cache(maxsize=1)
 def load_embedding_model():
     return SentenceTransformer(EMBEDDING_MODEL_NAME)
 
 
-@st.cache_resource
+@lru_cache(maxsize=1)
 def get_chroma_client():
     return chromadb.PersistentClient(path=CHROMA_DB_PATH)
 
@@ -23,7 +24,7 @@ def get_chroma_collection(collection_name):
     )
 
 
-@st.cache_data(max_entries=10, show_spinner=False)
+@lru_cache(maxsize=10)
 def build_embeddings(chunk_texts):
     model = load_embedding_model()
     return model.encode(

@@ -1,8 +1,8 @@
-import csv
+﻿import csv
 import hashlib
+from functools import lru_cache
 from io import BytesIO, StringIO
 
-import streamlit as st
 from docx import Document
 from openpyxl import load_workbook
 from pypdf import PdfReader
@@ -54,7 +54,7 @@ def decode_text(file_bytes):
     return file_bytes.decode("utf-8", errors="ignore")
 
 
-@st.cache_data(max_entries=20)
+@lru_cache(maxsize=20)
 def extract_pdf_units(file_name, file_bytes):
     reader = PdfReader(BytesIO(file_bytes))
 
@@ -81,7 +81,7 @@ def extract_pdf_units(file_name, file_bytes):
     return units
 
 
-@st.cache_data(max_entries=20)
+@lru_cache(maxsize=20)
 def extract_text_units(file_name, file_bytes, file_type):
     text = decode_text(file_bytes)
     lines = [line.strip() for line in text.splitlines() if line.strip()]
@@ -102,7 +102,7 @@ def extract_text_units(file_name, file_bytes, file_type):
     ]
 
 
-@st.cache_data(max_entries=20)
+@lru_cache(maxsize=20)
 def extract_docx_units(file_name, file_bytes):
     document = Document(BytesIO(file_bytes))
     units = []
@@ -125,7 +125,7 @@ def extract_docx_units(file_name, file_bytes):
     return units
 
 
-@st.cache_data(max_entries=20)
+@lru_cache(maxsize=20)
 def extract_csv_units(file_name, file_bytes):
     text = decode_text(file_bytes)
     reader = csv.reader(StringIO(text))
@@ -149,7 +149,7 @@ def extract_csv_units(file_name, file_bytes):
     return units
 
 
-@st.cache_data(max_entries=20)
+@lru_cache(maxsize=20)
 def extract_xlsx_units(file_name, file_bytes):
     workbook = load_workbook(BytesIO(file_bytes), read_only=True, data_only=True)
     units = []

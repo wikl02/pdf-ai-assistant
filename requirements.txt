@@ -7,3 +7,7 @@ numpy
 chromadb
 python-docx
 openpyxl
+fastapi
+uvicorn
+python-multipart
+requests

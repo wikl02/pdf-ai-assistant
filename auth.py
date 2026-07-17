@@ -1,18 +1,6 @@
-import os
+﻿import streamlit as st
 
-import streamlit as st
-
-
-def get_secret_value(name):
-    value = os.getenv(name)
-
-    if value:
-        return value
-
-    try:
-        return st.secrets[name]
-    except Exception:
-        return None
+from settings import get_secret_value
 
 
 def require_login():
