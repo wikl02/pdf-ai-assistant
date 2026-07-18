@@ -1,0 +1,48 @@
+name: pdf-ai-assistant
+
+services:
+  api:
+    image: crpi-efh1al370jt67g5v.cn-hangzhou.personal.cr.aliyuncs.com/wiki02/pdf-ai-api:latest
+    env_file:
+      - .env.production
+    environment:
+      DATABASE_URL: sqlite:////app/data/app.db
+      UPLOAD_STORAGE_DIR: /app/data/uploads
+      TZ: Asia/Shanghai
+    volumes:
+      - app_data:/app/data
+      - chroma_data:/app/.chroma_db
+      - model_cache:/home/app/.cache/huggingface
+    expose:
+      - "8000"
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    tmpfs:
+      - /tmp:size=256m
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  web:
+    image: crpi-efh1al370jt67g5v.cn-hangzhou.personal.cr.aliyuncs.com/wiki02/pdf-ai-web:latest
+    depends_on:
+      api:
+        condition: service_healthy
+    ports:
+      - "80:80"
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+volumes:
+  app_data:
+  chroma_data:
+  model_cache:
