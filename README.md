@@ -1,246 +1,250 @@
 # 企业知识库智能助手
 
-这是一个基于 Streamlit、Embedding、Chroma 向量数据库和 DeepSeek API 的企业知识库问答项目。用户可以同时上传多种格式的文档，系统会解析文档内容、切分文本块、生成向量并写入 Chroma，然后根据用户问题进行语义检索，最后调用 DeepSeek 基于检索结果生成回答。
+一个面向企业内部文档管理与知识查询的 RAG 应用。项目采用 Vue 3 + FastAPI 前后端分离架构，支持多格式文档解析、Embedding 语义检索、Chroma 向量存储和 DeepSeek 文档问答，并提供 JWT 登录、角色权限、知识库管理和用户管理。
 
-项目可以作为企业知识库智能助手的 MVP 原型，也适合作为 AI 应用开发、RAG、向量检索方向的简历项目。
+原有 Streamlit `app.py` 继续保留，可作为轻量演示和兼容入口。
 
-## 功能特点
+## 当前进度
 
-- 支持多文档同时上传
-- 支持 PDF、TXT、Markdown、DOCX、CSV、XLSX
-- 自动解析不同格式文档内容
-- 将文档内容切分为文本块
-- 使用 sentence-transformers 生成 Embedding 向量
-- 使用 Chroma 持久化存储向量
-- 根据用户问题进行向量相似度检索
-- 调用 DeepSeek API 生成文档问答结果
-- 回答时展示来源文档、页码、段落、行号或表格行号
-- 支持聊天记录展示和清空
-- 支持用户名和密码登录保护，避免公开链接被随意使用
-- 使用 SHA-256 识别当前知识库文件集合
-- 未检索到相关内容时不调用 AI，减少无效 token 消耗
-- 对 API Key 无效、余额不足、限流、网络失败等情况进行友好提示
+- [x] 多格式文档解析和文本分块
+- [x] Chroma 向量检索和来源标注
+- [x] DeepSeek 文档问答与友好异常提示
+- [x] FastAPI 模块化后端
+- [x] SQLite、SQLAlchemy 和 Alembic 迁移
+- [x] JWT 登录、管理员和普通用户权限
+- [x] 知识库、文档和用户管理接口
+- [x] Vue 3 企业管理后台和聊天查询页
+- [x] 后端接口测试和 Playwright 端到端测试
+- [ ] 用户与知识库细粒度授权
+- [ ] 聊天会话持久化和审计日志
+- [ ] Vue 与 FastAPI 云端部署
+
+## 功能
+
+### 管理员
+
+- 查看知识库、文档、文本块和用户统计
+- 创建和查看知识库
+- 上传 PDF、TXT、Markdown、DOCX、CSV、XLSX 文档
+- 查看文档处理状态、文件大小、SHA-256 和文本块数量
+- 删除文档并同步清理该文档的 Chroma 向量
+- 重新解析文档并建立索引
+- 创建用户、启用或禁用账号、修改角色、重置密码
+
+### 普通用户
+
+- 登录后查看可查询的知识库列表
+- 使用聊天界面进行知识库问答
+- 查看回答引用的文档名、页码或行号、相似度和原文片段
+- 新建会话或清空当前会话
+- 无法访问管理员路由和管理接口
 
 ## 技术栈
 
-- Python
-- Streamlit
-- FastAPI
-- pypdf
-- python-docx
-- openpyxl
-- sentence-transformers
-- Chroma
-- DeepSeek API
-- OpenAI Python SDK
-- python-dotenv
-- requests
+### 前端
+
+- Vue 3、Vite、TypeScript
+- Vue Router、Pinia、Axios
+- Element Plus、Lucide Icons
+- Playwright
+
+### 后端与 RAG
+
+- FastAPI、Uvicorn
+- SQLAlchemy、Alembic、SQLite
+- JWT、bcrypt
+- Chroma、sentence-transformers
+- DeepSeek API（OpenAI 兼容接口）
+- pypdf、python-docx、openpyxl
+- pytest
+
+## 系统架构
+
+```mermaid
+flowchart LR
+    U["浏览器用户"] --> V["Vue 3 前端"]
+    V -->|"JWT Bearer Token"| F["FastAPI"]
+    F --> A["认证与角色权限"]
+    F --> M["知识库和文档管理"]
+    F --> Q["RAG 问答服务"]
+    A --> DB["SQLite / SQLAlchemy"]
+    M --> DB
+    M --> FS["原始文档存储"]
+    M --> P["多格式文档解析"]
+    P --> S["文本分块"]
+    S --> C["Chroma 向量数据库"]
+    Q --> C
+    C --> L["DeepSeek LLM"]
+    L --> V
+    ST["Streamlit 兼容入口"] --> F
+```
 
 ## 项目结构
 
 ```text
-pdf-ai-assistant/
-├── app.py
-├── config.py
-├── auth.py
-├── document_loader.py
-├── text_splitter.py
-├── vector_store.py
-├── llm_client.py
-├── backend/
-│   ├── __init__.py
-│   └── main.py
-├── sample_documents/
-├── requirements.txt
-├── README.md
-├── PROJECT_PROGRESS.md
-├── .env.example
-└── .gitignore
+.
+├─ backend/
+│  ├─ core/             # 配置和安全工具
+│  ├─ dependencies/     # FastAPI 权限依赖
+│  ├─ models/           # 用户、知识库和文档模型
+│  ├─ routers/          # 登录、管理和问答接口
+│  ├─ schemas/          # 请求和响应模型
+│  ├─ services/         # 业务逻辑
+│  ├─ database.py
+│  └─ main.py           # FastAPI 入口
+├─ frontend/
+│  ├─ src/api/          # Axios API 封装
+│  ├─ src/components/   # 通用、知识库和聊天组件
+│  ├─ src/layouts/      # 管理后台和查询布局
+│  ├─ src/router/       # 路由与权限守卫
+│  ├─ src/stores/       # Pinia 登录状态
+│  ├─ src/types/        # TypeScript 类型
+│  └─ src/views/        # 登录、管理和查询页面
+├─ alembic/             # 数据库迁移
+├─ tests/               # FastAPI 接口测试
+├─ sample_documents/    # 本地测试文档
+├─ app.py               # Streamlit 兼容入口
+├─ document_loader.py   # 多格式文档解析
+├─ text_splitter.py     # 文本分块
+├─ vector_store.py      # Embedding 和 Chroma
+├─ llm_client.py        # DeepSeek 调用
+└─ requirements.txt
 ```
 
-说明：
+## 本地运行
 
-- `app.py`：Streamlit 页面入口，负责上传、提问、结果展示和聊天记录
-- `config.py`：项目配置项，例如分块大小、模型名称、支持文件类型
-- `auth.py`：用户名和密码登录模块，支持从环境变量或 Streamlit Secrets 读取账号配置
-- `document_loader.py`：文档解析模块，负责 PDF、TXT、Markdown、DOCX、CSV、XLSX 文本提取
-- `text_splitter.py`：文本分块和来源位置格式化模块
-- `vector_store.py`：Embedding 模型加载、Chroma 入库和向量检索模块
-- `llm_client.py`：DeepSeek API 调用和提示词上下文构建模块
-- `backend/main.py`：FastAPI 后端入口，提供登录、文档上传、知识库问答等接口
-- `sample_documents/`：本地测试用示例文档
-- `requirements.txt`：项目依赖列表
-- `README.md`：项目说明文档
-- `PROJECT_PROGRESS.md`：学习和开发进度记录
-- `.env.example`：环境变量示例文件，不存放真实 API Key
-- `.gitignore`：Git 忽略规则，避免上传 `.env`、虚拟环境和本地向量库
-
-本地运行后会生成 `.chroma_db/`，这是 Chroma 的本地向量数据库目录，不应该上传到 GitHub。
-
-## 环境准备
-
-建议使用 Python 3.10 或更高版本。
-
-创建并激活虚拟环境：
+### 1. 创建并激活虚拟环境
 
 ```powershell
+cd pdf-ai-assistant
 python -m venv .venv
 .\.venv\Scripts\Activate.ps1
+python -m pip install -r requirements.txt
 ```
 
-安装依赖：
+### 2. 配置环境变量
 
-```powershell
-pip install -r requirements.txt
-```
-
-## 配置 API Key
-
-在项目根目录创建 `.env` 文件，并填写 DeepSeek API Key：
-
-```env
-DEEPSEEK_API_KEY=你的 DeepSeek API Key
-APP_USERNAME=你的访问用户名
-APP_PASSWORD=你的访问密码
-```
-
-注意：`.env` 文件包含敏感信息，不要上传到 GitHub。
-
-可以创建 `.env.example` 作为示例：
+复制 `.env.example` 为 `.env`，然后填写本地配置。不要将 `.env` 上传到 GitHub。
 
 ```env
 DEEPSEEK_API_KEY=your_api_key_here
-APP_USERNAME=your_demo_username_here
-APP_PASSWORD=your_demo_password_here
-FASTAPI_BASE_URL=http://localhost:8000
+APP_USERNAME=your_admin_username
+APP_PASSWORD=your_admin_password
+JWT_SECRET_KEY=replace_with_a_long_random_secret
+ACCESS_TOKEN_EXPIRE_MINUTES=480
+DATABASE_URL=sqlite:///./data/app.db
+UPLOAD_STORAGE_DIR=./data/uploads
+CORS_ORIGINS=http://localhost:5173,http://127.0.0.1:5173
 ```
 
-如果部署到 Streamlit Community Cloud，需要在应用的 Secrets 中配置：
+`APP_USERNAME` 和 `APP_PASSWORD` 用于首次启动时创建管理员账号。
 
-```toml
-DEEPSEEK_API_KEY = "你的 DeepSeek API Key"
-APP_USERNAME = "你的访问用户名"
-APP_PASSWORD = "你的访问密码"
-```
-
-## 运行项目
-
-### 运行 Streamlit 版本
-
-在项目根目录执行：
+### 3. 执行数据库迁移
 
 ```powershell
-python -m streamlit run app.py
+python -m alembic upgrade head
 ```
 
-运行成功后，浏览器会打开：
-
-```text
-http://localhost:8501
-```
-
-### 运行 FastAPI 后端版本
-
-在项目根目录执行：
+### 4. 启动 FastAPI
 
 ```powershell
-python -m uvicorn backend.main:app --reload --port 8000
+python -m uvicorn backend.main:app --host 127.0.0.1 --port 8000
 ```
 
-运行成功后，可以打开接口文档：
+接口文档：<http://127.0.0.1:8000/docs>
 
-```text
-http://localhost:8000/docs
+如果 8000 端口已被占用，可以改用 8001，同时修改前端的 `VITE_API_BASE_URL`。
+
+### 5. 启动 Vue 前端
+
+复制 `frontend/.env.example` 为 `frontend/.env.local`：
+
+```env
+VITE_API_BASE_URL=http://127.0.0.1:8000
 ```
 
-当前 FastAPI 后端已提供 JWT 登录、当前用户、知识库目录、管理员知识库与文档管理、用户管理和聊天问答接口；原有 `/login`、`/upload`、`/ask` 兼容接口继续保留。
-
-### 运行 Vue 3 前端
-
-先复制 `frontend/.env.example` 为 `frontend/.env.local`，并按实际后端地址修改 `VITE_API_BASE_URL`。然后执行：
+在第二个终端执行：
 
 ```powershell
-cd frontend
+cd pdf-ai-assistant\frontend
 npm install
 npm run dev
 ```
 
-默认访问地址：
+访问：<http://127.0.0.1:5173>
 
-```text
-http://127.0.0.1:5173
-```
-
-正式构建：
+### 6. 可选：启动 Streamlit 兼容版本
 
 ```powershell
+cd pdf-ai-assistant
+python -m streamlit run app.py
+```
+
+访问：<http://127.0.0.1:8501>
+
+## 主要路由
+
+| 页面 | 权限 | 用途 |
+| --- | --- | --- |
+| `/login` | 公开 | 登录 |
+| `/admin/dashboard` | 管理员 | 数据概览 |
+| `/admin/knowledge-bases` | 管理员 | 知识库列表与创建 |
+| `/admin/knowledge-bases/:id` | 管理员 | 文档上传、删除和重新索引 |
+| `/admin/users` | 管理员 | 用户管理 |
+| `/app/chat` | 已登录用户 | 知识库查询 |
+| `/403` | 公开 | 越权提示 |
+
+普通用户知识库目录接口：
+
+```http
+GET /api/knowledge-bases
+Authorization: Bearer <JWT>
+```
+
+当前活跃用户可以读取全部知识库列表，细粒度知识库授权将在后续版本增加。
+
+## 测试与构建
+
+后端测试：
+
+```powershell
+python -m pytest -q
+```
+
+Vue 正式构建：
+
+```powershell
+cd frontend
 npm run build
 ```
 
-## 系统流程图
+Playwright 端到端测试需要先启动 FastAPI 和 Vue，并配置测试管理员环境变量：
 
-```mermaid
-flowchart TD
-    A["用户打开 Streamlit 应用"] --> B["输入用户名和密码"]
-    B --> C{"账号验证是否通过"}
-    C -- "否" --> D["提示用户名或密码错误"]
-    D --> B
-    C -- "是" --> E["进入企业知识库智能助手"]
-
-    E --> F["上传知识库文档"]
-    F --> G["读取文件并计算 SHA-256 文件指纹"]
-    G --> H["解析多格式文档内容"]
-    H --> I["文本分块并记录来源位置"]
-    I --> J["Embedding 模型生成文本向量"]
-    J --> K["写入 Chroma 向量数据库"]
-
-    K --> L["用户输入问题"]
-    L --> M["问题转为向量"]
-    M --> N["Chroma 检索相关文本块"]
-    N --> O{"是否检索到相关内容"}
-    O -- "否" --> P["提示未找到相关信息，不调用 AI"]
-    O -- "是" --> Q["构建问题上下文"]
-    Q --> R["调用 DeepSeek LLM 生成回答"]
-    R --> S["展示回答、来源文本块和聊天记录"]
+```powershell
+cd frontend
+npx playwright test
 ```
 
-## 使用流程
+当前验收结果：后端 7 项测试通过，管理员和普通用户两条 Playwright 业务链路通过。
 
-1. 上传一个或多个知识库文档
-2. 等待系统解析文档并写入 Chroma 向量数据库
-3. 在输入框中输入问题
-4. 点击“提交问题”
-5. 查看 AI 回答和检索到的来源文本块
+## 数据与安全
 
-## 当前版本说明
+以下内容不会提交到 GitHub：
 
-当前版本已经从单 PDF 问答助手升级为多文档企业知识库智能助手 MVP。
+- `.env`、`frontend/.env.local`
+- `.venv/`、`frontend/node_modules/`、`frontend/dist/`
+- `data/`、`.chroma_db/`
+- Playwright 临时测试结果
 
-当前支持的知识库流程：
+生产部署时必须：
 
-```text
-多文档上传
--> 文档解析
--> 文本分块
--> Embedding 向量化
--> Chroma 向量入库
--> 问题向量检索
--> DeepSeek 生成回答
--> 来源文档展示
-```
+- 使用独立的强随机 `JWT_SECRET_KEY`
+- 将 DeepSeek API Key 配置为云端密钥
+- 配置准确的 `CORS_ORIGINS`
+- 将关系数据库迁移到 PostgreSQL
+- 为上传文档和 Chroma 配置持久化存储
+- 使用 HTTPS，不在日志中记录密码和 Token
 
-PDF 页码和行号基于提取后的文本计算，可能与复杂排版中的视觉行号略有差异。扫描版 PDF 暂时需要后续加入 OCR。
+## 项目定位
 
-## 后续优化方向
-
-- 增加 OCR，支持扫描版 PDF
-- 增加文档删除和重新构建索引功能
-- 支持知识库历史持久化管理
-- 支持多知识库切换
-- 增加用户登录和权限控制
-- 部署到 Streamlit Community Cloud 或云服务器
-- 已重构为 FastAPI + Vue 3 前后端分离架构
-
-## 简历描述参考
-
-企业知识库智能助手：基于 Python、Streamlit、Chroma、sentence-transformers 和 DeepSeek API 开发的多文档 RAG 问答应用，支持 PDF、TXT、Markdown、DOCX、CSV、XLSX 等多种文档格式，实现文档解析、文本分块、Embedding 向量化、Chroma 向量检索、来源标注、聊天记录和 API 异常处理，完成企业知识库智能助手 MVP。
+该项目已经从单文件 PDF 问答原型升级为包含前端、后端、数据库、权限和文档管理的企业知识库 MVP，可用于展示 RAG 应用开发、FastAPI 工程化和 Vue 前后端分离能力。
