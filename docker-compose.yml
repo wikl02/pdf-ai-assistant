@@ -1,0 +1,54 @@
+name: pdf-ai-assistant
+
+services:
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    env_file:
+      - .env.production
+    environment:
+      DATABASE_URL: sqlite:////app/data/app.db
+      UPLOAD_STORAGE_DIR: /app/data/uploads
+      TZ: Asia/Shanghai
+    volumes:
+      - app_data:/app/data
+      - chroma_data:/app/.chroma_db
+      - model_cache:/home/app/.cache/huggingface
+    expose:
+      - "8000"
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    tmpfs:
+      - /tmp:size=256m
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  web:
+    build:
+      context: .
+      dockerfile: frontend/Dockerfile
+      args:
+        VITE_API_BASE_URL: /
+    depends_on:
+      api:
+        condition: service_healthy
+    ports:
+      - "80:80"
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+volumes:
+  app_data:
+  chroma_data:
+  model_cache:

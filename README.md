@@ -245,6 +245,17 @@ npx playwright test
 - 为上传文档和 Chroma 配置持久化存储
 - 使用 HTTPS，不在日志中记录密码和 Token
 
+## Docker 部署
+
+项目已经提供：
+
+- 根目录 `Dockerfile`：FastAPI、Alembic 和 RAG 运行环境。
+- `frontend/Dockerfile`：构建 Vue 并使用 Nginx 提供静态页面。
+- `docker-compose.yml`：编排 Web、API 和持久化卷。
+- `deploy/nginx/default.conf`：Vue SPA 路由和 FastAPI 反向代理。
+- `.env.production.example`：生产环境变量模板。
+
+阿里云 Ubuntu ECS 的完整操作步骤见 [`DEPLOYMENT.md`](DEPLOYMENT.md)。
 ## 项目定位
 
 该项目已经从单文件 PDF 问答原型升级为包含前端、后端、数据库、权限和文档管理的企业知识库 MVP，可用于展示 RAG 应用开发、FastAPI 工程化和 Vue 前后端分离能力。
