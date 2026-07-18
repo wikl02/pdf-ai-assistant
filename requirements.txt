@@ -7,3 +7,12 @@ numpy
 chromadb
 python-docx
 openpyxl
+fastapi
+uvicorn
+python-multipart
+requests
+sqlalchemy
+PyJWT
+bcrypt
+alembic
+pytest

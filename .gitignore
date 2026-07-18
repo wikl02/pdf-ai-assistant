@@ -9,3 +9,10 @@ __pycache__/
 output/
 tmp/
 .chroma_db/
+
+frontend/node_modules/
+frontend/dist/
+data/
+
+frontend/.env.local
+frontend/test-results/
