@@ -18,11 +18,14 @@ RUN python -m pip install --upgrade pip \
     && python -m pip install torch --index-url https://download.pytorch.org/whl/cpu \
     && python -m pip install -r requirements.txt
 
+RUN useradd --create-home --uid 10001 app \
+    && mkdir -p /app/data/uploads /app/.chroma_db "$HF_HOME"
+
+RUN python -c "from sentence_transformers import SentenceTransformer; SentenceTransformer('paraphrase-multilingual-MiniLM-L12-v2')"
+
 COPY . .
 
-RUN useradd --create-home --uid 10001 app \
-    && mkdir -p /app/data/uploads /app/.chroma_db "$HF_HOME" \
-    && chown -R app:app /app /home/app
+RUN chown -R app:app /app /home/app
 
 USER app
 
