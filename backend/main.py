@@ -3,6 +3,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from starlette.middleware.trustedhost import TrustedHostMiddleware
 
 from backend.core.config import settings
 from backend.database import init_database, session_scope
@@ -34,15 +35,22 @@ async def lifespan(_: FastAPI):
 def create_app() -> FastAPI:
     application = FastAPI(
         title="企业知识库智能助手 API",
-        version="0.3.0",
+        version="0.4.0",
         lifespan=lifespan,
+        docs_url="/docs" if settings.api_docs_enabled else None,
+        redoc_url="/redoc" if settings.api_docs_enabled else None,
+        openapi_url="/openapi.json" if settings.api_docs_enabled else None,
+    )
+    application.add_middleware(
+        TrustedHostMiddleware,
+        allowed_hosts=settings.allowed_hosts or ["*"],
     )
     application.add_middleware(
         CORSMiddleware,
         allow_origins=settings.cors_origins,
         allow_credentials=True,
-        allow_methods=["*"],
-        allow_headers=["*"],
+        allow_methods=["GET", "POST", "PATCH", "DELETE", "OPTIONS"],
+        allow_headers=["Authorization", "Content-Type", "Accept"],
     )
     application.include_router(health.router)
     application.include_router(auth.router)

@@ -2,6 +2,7 @@ name: pdf-ai-assistant
 
 services:
   api:
+    init: true
     build:
       context: .
       dockerfile: Dockerfile
@@ -17,7 +18,15 @@ services:
       - model_cache:/home/app/.cache/huggingface
     expose:
       - "8000"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health/live', timeout=5)"]
+      interval: 30s
+      timeout: 10s
+      start_period: 90s
+      retries: 3
     restart: unless-stopped
+    stop_grace_period: 30s
+    pids_limit: 256
     security_opt:
       - no-new-privileges:true
     tmpfs:
@@ -29,6 +38,7 @@ services:
         max-file: "3"
 
   web:
+    init: true
     build:
       context: .
       dockerfile: frontend/Dockerfile
@@ -39,7 +49,14 @@ services:
         condition: service_healthy
     ports:
       - "80:80"
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1/healthz"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
     restart: unless-stopped
+    stop_grace_period: 15s
+    pids_limit: 128
     security_opt:
       - no-new-privileges:true
     logging:

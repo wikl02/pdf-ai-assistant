@@ -5,6 +5,7 @@ from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
 from sqlalchemy.orm import Session
 
 from backend.database import get_db
+from backend.core.audit import audit_event
 from backend.dependencies.auth import AdminUser
 from backend.schemas.knowledge import UploadResponse
 from backend.schemas.management import (
@@ -45,6 +46,13 @@ def add_knowledge_base(
     db: Annotated[Session, Depends(get_db)],
 ) -> KnowledgeBaseResponse:
     knowledge_base = create_knowledge_base(db, payload, current_user)
+    audit_event(
+        "knowledge_base_created",
+        actor_id=current_user.id,
+        actor_name=current_user.username,
+        knowledge_base_id=knowledge_base.id,
+        collection_id=knowledge_base.collection_name,
+    )
     return KnowledgeBaseResponse.model_validate(knowledge_base)
 
 
@@ -84,6 +92,16 @@ async def add_documents(
             )
         )
     detail = get_knowledge_base_detail(db, knowledge_base_id)
+    audit_event(
+        "documents_uploaded",
+        actor_id=current_user.id,
+        actor_name=current_user.username,
+        knowledge_base_id=knowledge_base_id,
+        document_ids=",".join(str(item.id) for item in documents),
+        file_count=len(documents),
+        total_bytes=sum(item.file_size for item in documents),
+        chunk_count=sum(item.chunk_count for item in documents),
+    )
     return DocumentUploadResponse(
         knowledge_base_id=knowledge_base_id,
         collection_id=detail["collection_name"],
@@ -112,10 +130,17 @@ def get_documents(
 def remove_document(
     knowledge_base_id: int,
     document_id: int,
-    _: AdminUser,
+    current_user: AdminUser,
     db: Annotated[Session, Depends(get_db)],
 ) -> MessageResponse:
     delete_document(db, knowledge_base_id, document_id)
+    audit_event(
+        "document_deleted",
+        actor_id=current_user.id,
+        actor_name=current_user.username,
+        knowledge_base_id=knowledge_base_id,
+        document_id=document_id,
+    )
     return MessageResponse(message="文档已删除，相关向量文本块已清理")
 
 
@@ -126,12 +151,19 @@ def remove_document(
 def rebuild_document_index(
     knowledge_base_id: int,
     document_id: int,
-    _: AdminUser,
+    current_user: AdminUser,
     db: Annotated[Session, Depends(get_db)],
 ) -> DocumentResponse:
-    return DocumentResponse.model_validate(
-        reindex_document(db, knowledge_base_id, document_id)
+    document = reindex_document(db, knowledge_base_id, document_id)
+    audit_event(
+        "document_reindexed",
+        actor_id=current_user.id,
+        actor_name=current_user.username,
+        knowledge_base_id=knowledge_base_id,
+        document_id=document_id,
+        chunk_count=document.chunk_count,
     )
+    return DocumentResponse.model_validate(document)
 
 
 @compatibility_router.post("/upload", response_model=UploadResponse)
@@ -167,6 +199,16 @@ async def compatibility_upload(
                 await file.read(),
             )
         )
+    audit_event(
+        "compatibility_upload",
+        actor_id=current_user.id,
+        actor_name=current_user.username,
+        knowledge_base_id=knowledge_base.id,
+        collection_id=knowledge_base.collection_name,
+        file_count=len(documents),
+        total_bytes=sum(item.file_size for item in documents),
+        chunk_count=sum(item.chunk_count for item in documents),
+    )
     return UploadResponse(
         collection_id=knowledge_base.collection_name,
         document_count=len(documents),

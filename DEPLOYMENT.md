@@ -1,5 +1,8 @@
 # 阿里云 ECS 部署说明
 
+生产上线前请同时完成 [PRODUCTION_READINESS.md](PRODUCTION_READINESS.md) 中的安全、
+健康检查、审计日志、备份恢复和阿里云配置检查项。
+
 本说明适用于 Ubuntu 22.04、2 核 4 GB 内存的阿里云 ECS。部署后由 Nginx 提供 Vue 页面并转发 FastAPI，请勿直接向公网开放 8000 或 5173 端口。
 
 ## 1. 安全组

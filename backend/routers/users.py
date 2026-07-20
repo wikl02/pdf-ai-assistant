@@ -4,6 +4,7 @@ from fastapi import APIRouter, Depends, status
 from sqlalchemy.orm import Session
 
 from backend.database import get_db
+from backend.core.audit import audit_event
 from backend.dependencies.auth import AdminUser
 from backend.schemas.user import UserCreate, UserResponse
 from backend.services.user_service import create_user, list_users
@@ -23,7 +24,15 @@ def get_users(
 @router.post("", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
 def add_user(
     payload: UserCreate,
-    _: AdminUser,
+    current_user: AdminUser,
     db: Annotated[Session, Depends(get_db)],
 ) -> UserResponse:
-    return UserResponse.model_validate(create_user(db, payload))
+    user = create_user(db, payload)
+    audit_event(
+        "user_created",
+        actor_id=current_user.id,
+        actor_name=current_user.username,
+        target_user_id=user.id,
+        target_role=user.role,
+    )
+    return UserResponse.model_validate(user)
