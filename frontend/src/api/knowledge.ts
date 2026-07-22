@@ -38,6 +38,7 @@ export async function uploadDocumentsApi(
   const { data } = await http.post<DocumentUploadResponse>(
     `/api/admin/knowledge-bases/${knowledgeBaseId}/documents`,
     form,
+    { timeout: 900_000 },
   )
   return data
 }

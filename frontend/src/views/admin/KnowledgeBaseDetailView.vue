@@ -50,6 +50,7 @@ async function upload(files: File[]) {
   try {
     await uploadDocumentsApi(knowledgeBaseId.value, files)
     ElMessage.success('文档上传并建立索引成功')
+    uploading.value = false
     uploadDialogOpen.value = false
     await loadDetail()
   } catch (error) {

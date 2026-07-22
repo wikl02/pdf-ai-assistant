@@ -661,9 +661,24 @@ code {
   background: #f5f8ff;
 }
 
+.upload-dropzone.is-dragging {
+  border-color: var(--brand);
+  color: var(--brand);
+  background: #eef4ff;
+}
+
+.upload-dropzone:disabled {
+  cursor: not-allowed;
+  opacity: 0.7;
+}
+
 .upload-dropzone span {
   color: var(--muted);
   font-size: 12px;
+}
+
+.upload-message {
+  margin-top: 12px;
 }
 
 .selected-file-list {
