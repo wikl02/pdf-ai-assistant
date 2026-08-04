@@ -83,6 +83,7 @@ const router = createRouter({
 router.beforeEach(async (to) => {
   const auth = useAuthStore()
 
+  // 已登录用户访问登录页时，按角色送回各自的工作区。
   if (to.name === 'login' && auth.token) {
     try {
       if (!auth.user) await auth.fetchCurrentUser()
@@ -97,6 +98,7 @@ router.beforeEach(async (to) => {
     return { name: 'login', query: { redirect: to.fullPath } }
   }
 
+  // 页面刷新时 Pinia 内存状态为空，需要先用本地 token 恢复当前用户。
   if (!auth.user) {
     try {
       await auth.fetchCurrentUser()
@@ -105,6 +107,7 @@ router.beforeEach(async (to) => {
     }
   }
 
+  // 前端守卫负责用户体验；真正的安全边界仍由 FastAPI 的角色依赖保证。
   if (to.meta.adminOnly && !auth.isAdmin) {
     return { name: 'forbidden' }
   }

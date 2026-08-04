@@ -34,10 +34,12 @@ export async function uploadDocumentsApi(
   files: File[],
 ): Promise<DocumentUploadResponse> {
   const form = new FormData()
+  // 后端参数名是 files；多次 append 可在一个 multipart 请求中上传多个文档。
   files.forEach((file) => form.append('files', file))
   const { data } = await http.post<DocumentUploadResponse>(
     `/api/admin/knowledge-bases/${knowledgeBaseId}/documents`,
     form,
+    // 上传后还会同步解析、计算 Embedding 和写入 Chroma，单独放宽到 15 分钟。
     { timeout: 900_000 },
   )
   return data

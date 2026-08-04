@@ -1,3 +1,5 @@
+"""兼容接口使用的 RAG 编排：文件建库、向量检索和 AI 回答。"""
+
 import logging
 
 from fastapi import HTTPException
@@ -49,6 +51,7 @@ def build_knowledge_base(file_infos: list[dict]) -> dict:
     if not chunks:
         raise HTTPException(status_code=400, detail="没有从文档中提取到可检索文本")
 
+    # 文件集合指纹决定 collection 名，相同文件集合可稳定对应同一知识库。
     collection_name = safe_collection_name(make_file_set_id(file_infos))
     index_chunks_in_chroma(collection_name, chunks)
     return {
@@ -69,8 +72,10 @@ def answer_question(collection_id: str, question: str) -> dict:
     collection = get_chroma_collection(collection_id)
     if collection.count() == 0:
         raise HTTPException(status_code=404, detail="未找到对应知识库，请先上传文档")
+    # 先检索再调用大模型，既减少 token 消耗，也避免模型脱离文档自由发挥。
     relevant_chunks = retrieve_relevant_chunks(collection, normalized_question)
     if not relevant_chunks:
+        # 没有达到相似度阈值时直接返回，不消耗 DeepSeek 额度。
         return {
             "answer": "没有在知识库中检索到与问题相关的内容，因此本次没有调用 AI。",
             "sources": [],

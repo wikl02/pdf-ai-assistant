@@ -1,10 +1,12 @@
 ﻿from openai import OpenAI
 
+# 本模块把检索结果组织成上下文，并通过 OpenAI 兼容协议调用 DeepSeek。
 from settings import get_secret_value
 from text_splitter import format_location
 
 
 def build_context(chunks):
+    # 来源位置和原文一起交给模型，回答才能生成可核查的引用。
     context_sections = []
 
     for chunk in chunks:
@@ -30,6 +32,7 @@ def ask_ai(context_text, user_question):
     if not api_key:
         return "还没有配置 DEEPSEEK_API_KEY。你可以先完成知识库上传和检索，下一步再接入 AI。"
 
+    # DeepSeek 提供 OpenAI 兼容接口，因此可直接复用 OpenAI Python SDK。
     client = OpenAI(
         api_key=api_key,
         base_url="https://api.deepseek.com",
@@ -61,6 +64,7 @@ def ask_ai(context_text, user_question):
         return response.choices[0].message.content
 
     except Exception as e:
+        # 对外返回可操作的友好提示，不把底层异常和敏感配置暴露给用户。
         error_text = str(e).lower()
 
         if "402" in error_text or "insufficient balance" in error_text or "balance" in error_text:

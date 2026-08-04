@@ -3,6 +3,9 @@ from bisect import bisect_right
 from config import CHUNK_OVERLAP, CHUNK_SIZE
 
 
+# 本模块把带来源位置的文本单元切成适合向量检索的重叠文本块。
+
+
 def format_location(metadata):
     location_type = metadata.get("location_type")
 
@@ -34,6 +37,7 @@ def split_units_to_chunks(units, chunk_size=CHUNK_SIZE, overlap=CHUNK_OVERLAP):
         if not text:
             continue
 
+        # 记录每行在原文本中的字符偏移，用于把文本块映射回准确行号。
         line_offsets = []
         position = 0
         lines = text.splitlines() or [text]
@@ -81,6 +85,7 @@ def split_units_to_chunks(units, chunk_size=CHUNK_SIZE, overlap=CHUNK_OVERLAP):
             if end == len(text):
                 break
 
+            # 相邻文本块保留重叠内容，降低答案恰好被切在边界上的风险。
             start = end - overlap
 
     return chunks

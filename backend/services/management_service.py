@@ -1,3 +1,8 @@
+"""企业知识库与文档的持久化管理服务。
+
+上传流程为：保存原文件和数据库记录 -> 解析文本 -> 分块 -> 向量化 -> 写入 Chroma。
+"""
+
 import logging
 from pathlib import Path
 from uuid import uuid4
@@ -25,6 +30,7 @@ logger = logging.getLogger("pdf_ai_assistant.management")
 
 
 def _knowledge_base_or_404(db: Session, knowledge_base_id: int) -> KnowledgeBase:
+    # 一次预加载关联文档，避免在统计文档数和文本块数时反复查询数据库。
     knowledge_base = db.scalar(
         select(KnowledgeBase)
         .where(KnowledgeBase.id == knowledge_base_id)
@@ -98,6 +104,7 @@ def create_knowledge_base(
     knowledge_base = KnowledgeBase(
         name=name,
         description=payload.description.strip() if payload.description else None,
+        # 每个数据库知识库对应一个独立的 Chroma collection。
         collection_name=f"enterprise_kb_{uuid4().hex}",
         created_by_id=current_user.id,
     )
@@ -133,6 +140,7 @@ def _storage_path(filename: str) -> Path:
     safe_name = Path(filename).name or "document"
     suffix = Path(safe_name).suffix.lower()
     settings.upload_storage_dir.mkdir(parents=True, exist_ok=True)
+    # 磁盘文件使用随机名，避免重名覆盖；原文件名仍保存在数据库中用于展示。
     return (settings.upload_storage_dir / f"{uuid4().hex}{suffix}").resolve()
 
 
@@ -141,17 +149,20 @@ def _process_document(
     knowledge_base: KnowledgeBase,
     document: Document,
 ) -> Document:
+    # 先落库“处理中”状态，让失败后仍能在管理页面看到并执行重新索引。
     document.status = DocumentStatus.PROCESSING.value
     document.error_message = None
     db.commit()
 
     try:
+        # 解析器保留页码、行号、段落或表格行等来源位置，供回答引用。
         file_bytes = Path(document.storage_path).read_bytes()
         file_info = build_file_info(document.filename, file_bytes)
         units = extract_document_units(file_info)
         chunks = split_units_to_chunks(units)
         if not chunks:
             raise ValueError("没有从文档中提取到可检索文本")
+        # 这里会计算 Embedding，并只替换当前文档在 collection 中的文本块。
         index_document_chunks(knowledge_base.collection_name, document.id, chunks)
     except Exception as exc:
         logger.exception("document indexing failed document_id=%s", document.id)
@@ -188,6 +199,7 @@ def upload_document(
     knowledge_base = _knowledge_base_or_404(db, knowledge_base_id)
     file_info = build_file_info(Path(filename).name, file_bytes)
 
+    # SHA256 用内容而不是文件名判重，同一文件改名后仍会被识别。
     duplicate = db.scalar(
         select(Document)
         .join(KnowledgeBaseDocument)
@@ -199,6 +211,7 @@ def upload_document(
     if duplicate:
         raise HTTPException(status_code=409, detail=f"文档 {filename} 已存在于该知识库")
 
+    # 原文件先持久化，再建立数据库关联；以后可以从原文件重新构建索引。
     storage_path = _storage_path(filename)
     storage_path.write_bytes(file_bytes)
     document = Document(
@@ -221,6 +234,7 @@ def upload_document(
     )
     db.commit()
     db.refresh(document)
+    # 当前版本同步建立索引，因此较大文档或模型冷启动时请求会等待较久。
     return _process_document(db, knowledge_base, document)
 
 
@@ -236,8 +250,10 @@ def reindex_document(
 def delete_document(db: Session, knowledge_base_id: int, document_id: int) -> None:
     link = _document_link_or_404(db, knowledge_base_id, document_id)
     document = link.document
+    # 使用 document_id 过滤，避免删除同一 collection 中其他文档的向量。
     delete_document_chunks(link.knowledge_base.collection_name, document.id)
 
+    # 文档可能被多个知识库关联；只有没有其他关联时才删除原文件和文档记录。
     remaining_links = db.scalar(
         select(func.count())
         .select_from(KnowledgeBaseDocument)

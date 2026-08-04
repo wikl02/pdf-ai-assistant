@@ -30,6 +30,7 @@ watch(
 
 function addFiles(incomingFiles: File[]) {
   validationMessage.value = ''
+  // 浏览器 accept 只是选择器提示，拖放文件仍需在代码中再次校验扩展名。
   const unsupported = incomingFiles.filter((file) => {
     const extension = file.name.split('.').pop()?.toLowerCase() || ''
     return !SUPPORTED_EXTENSIONS.has(extension)
@@ -42,6 +43,7 @@ function addFiles(incomingFiles: File[]) {
     const extension = file.name.split('.').pop()?.toLowerCase() || ''
     return SUPPORTED_EXTENSIONS.has(extension)
   })
+  // 文件名、大小和修改时间组合用于过滤同一次选择中的重复文件。
   const existingKeys = new Set(
     files.value.map((file) => `${file.name}-${file.size}-${file.lastModified}`),
   )
@@ -49,6 +51,7 @@ function addFiles(incomingFiles: File[]) {
     (file) => !existingKeys.has(`${file.name}-${file.size}-${file.lastModified}`),
   )
   const nextFiles = [...files.value, ...additions]
+  // 与 Nginx 的 client_max_body_size 保持一致，提交前给出更清楚的错误。
   const totalSize = nextFiles.reduce((total, file) => total + file.size, 0)
   if (totalSize > MAX_TOTAL_SIZE) {
     validationMessage.value = '单次上传文件总大小不能超过 50 MB，请分批上传。'
@@ -66,6 +69,7 @@ function selectFiles(event: Event) {
 function dropFiles(event: DragEvent) {
   dragActive.value = false
   if (props.loading) return
+  // drop 事件已在模板中 preventDefault，避免浏览器直接打开本地文件。
   addFiles(Array.from(event.dataTransfer?.files || []))
 }
 

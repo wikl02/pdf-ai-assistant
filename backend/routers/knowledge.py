@@ -44,6 +44,7 @@ async def upload_documents(
 @router.post("/api/chat/ask", response_model=AskResponse)
 @router.post("/ask", response_model=AskResponse, include_in_schema=False)
 def ask_question(request: AskRequest, current_user: KnowledgeUser) -> AskResponse:
+    # 路由只负责权限、参数和审计，RAG 细节统一由 service 编排。
     result = AskResponse.model_validate(
         answer_question(request.collection_id, request.question)
     )

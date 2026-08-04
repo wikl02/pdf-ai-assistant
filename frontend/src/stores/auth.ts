@@ -6,6 +6,7 @@ import { TOKEN_STORAGE_KEY } from '../api/http'
 import type { User } from '../types'
 
 export const useAuthStore = defineStore('auth', () => {
+  // token 持久化到 localStorage，页面刷新后仍可调用 /me 恢复当前用户。
   const token = ref(localStorage.getItem(TOKEN_STORAGE_KEY) || '')
   const user = ref<User | null>(null)
   const restoring = ref(false)
@@ -28,6 +29,7 @@ export const useAuthStore = defineStore('auth', () => {
     if (!token.value) throw new Error('missing token')
     restoring.value = true
     try {
+      // 不直接信任 JWT 内的角色，而是从后端获取账号的最新状态和权限。
       user.value = await getCurrentUserApi()
       return user.value
     } catch (error) {
@@ -41,6 +43,7 @@ export const useAuthStore = defineStore('auth', () => {
   async function login(username: string, password: string) {
     const response = await loginApi(username, password)
     persistToken(response.access_token)
+    // 登录后立即校验 /me，确保后续路由守卫拥有可靠的用户和角色信息。
     await fetchCurrentUser()
     return user.value
   }

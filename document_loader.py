@@ -1,4 +1,5 @@
 ﻿import csv
+# 将不同格式的原始文件解析成带来源位置的统一文本单元。
 import hashlib
 from functools import lru_cache
 from io import BytesIO, StringIO
@@ -46,6 +47,7 @@ def build_file_infos(uploaded_files):
 
 
 def decode_text(file_bytes):
+    # 优先覆盖常见中文文本编码，最后以容错方式解码，避免整个上传流程崩溃。
     for encoding in ("utf-8-sig", "utf-8", "gbk"):
         try:
             return file_bytes.decode(encoding)
@@ -56,6 +58,7 @@ def decode_text(file_bytes):
 
 @lru_cache(maxsize=20)
 def extract_pdf_units(file_name, file_bytes):
+    # 文件名和 bytes 都可哈希，因此相同文件可复用本进程中的解析结果。
     reader = PdfReader(BytesIO(file_bytes))
 
     if reader.is_encrypted:
@@ -179,6 +182,8 @@ def extract_xlsx_units(file_name, file_bytes):
 
 
 def extract_document_units(file_info):
+    """按文件类型分派解析器，返回结构一致的文本单元列表。"""
+
     file_type = file_info["type"]
 
     if file_type == "pdf":

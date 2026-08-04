@@ -28,6 +28,7 @@ async function loadKnowledgeBases() {
   errorMessage.value = ''
   try {
     knowledgeBases.value = await listAccessibleKnowledgeBasesApi()
+    // 记住上次选择；若知识库已被删除，则自动回退到列表第一项。
     const savedId = Number(localStorage.getItem('enterprise_kb_selected_id'))
     const savedExists = knowledgeBases.value.some((item) => item.id === savedId)
     selectedKnowledgeBaseId.value = savedExists ? savedId : knowledgeBases.value[0]?.id || null
@@ -69,6 +70,7 @@ async function ask() {
 
   messages.value.push(createMessage('user', content))
   question.value = ''
+  // 先插入 loading 消息，接口返回后原地更新，避免聊天区域发生布局跳动。
   const assistantMessage: ChatMessage = {
     id: `${Date.now()}-assistant`,
     role: 'assistant',

@@ -1,3 +1,5 @@
+"""登录和当前用户接口。"""
+
 import logging
 from typing import Annotated
 
@@ -34,6 +36,7 @@ def login(
             client_ip=client_ip,
         )
         raise HTTPException(status_code=401, detail="用户名或密码不正确")
+    # 登录成功后签发 JWT，后续请求无需重复提交用户名和密码。
     token, expires_in = create_access_token(
         user_id=user.id,
         username=user.username,
@@ -55,4 +58,5 @@ def login(
 
 @router.get("/api/auth/me", response_model=UserResponse)
 def get_me(current_user: CurrentUser) -> UserResponse:
+    # /me 同时用于刷新页面后恢复前端登录状态，并确认账号仍处于启用状态。
     return UserResponse.model_validate(current_user)
