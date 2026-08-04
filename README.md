@@ -11,7 +11,7 @@
 - [x] DeepSeek 文档问答与友好异常提示
 - [x] FastAPI 模块化后端
 - [x] SQLite、SQLAlchemy 和 Alembic 迁移
-- [x] JWT 登录、管理员和普通用户权限
+- [x] JWT 登录、超级管理员、管理员和普通用户分级权限
 - [x] 知识库、文档和用户管理接口
 - [x] Vue 3 企业管理后台和聊天查询页
 - [x] 后端接口测试和 Playwright 端到端测试
@@ -29,7 +29,9 @@
 - 查看文档处理状态、文件大小、SHA-256 和文本块数量
 - 删除文档并同步清理该文档的 Chroma 向量
 - 重新解析文档并建立索引
-- 创建用户、启用或禁用账号、修改角色、重置密码
+- 超级管理员可管理全部账号；普通管理员只能管理普通用户
+- 创建、启用、禁用、软删除、恢复用户，修改角色和重置密码
+- 查看文档版本、处理失败原因和索引任务历史
 
 ### 普通用户
 
@@ -137,7 +139,7 @@ UPLOAD_STORAGE_DIR=./data/uploads
 CORS_ORIGINS=http://localhost:5173,http://127.0.0.1:5173
 ```
 
-`APP_USERNAME` 和 `APP_PASSWORD` 用于首次启动时创建管理员账号。
+`APP_USERNAME` 和 `APP_PASSWORD` 用于首次启动时创建超级管理员账号；已有同名引导管理员会在启动时升级为超级管理员。
 
 ### 3. 执行数据库迁移
 
@@ -189,8 +191,8 @@ python -m streamlit run app.py
 | `/login` | 公开 | 登录 |
 | `/admin/dashboard` | 管理员 | 数据概览 |
 | `/admin/knowledge-bases` | 管理员 | 知识库列表与创建 |
-| `/admin/knowledge-bases/:id` | 管理员 | 文档上传、删除和重新索引 |
-| `/admin/users` | 管理员 | 用户管理 |
+| `/admin/knowledge-bases/:id` | 管理员 | 文档上传、版本、删除和索引任务管理 |
+| `/admin/users` | 管理员 | 分级用户管理、软删除与恢复 |
 | `/app/chat` | 已登录用户 | 知识库查询 |
 | `/403` | 公开 | 越权提示 |
 
@@ -225,7 +227,7 @@ cd frontend
 npx playwright test
 ```
 
-当前验收结果：后端 7 项测试通过，管理员和普通用户两条 Playwright 业务链路通过。
+当前第七阶段验收结果：后端 23 项测试通过，Playwright 4 条桌面端/移动端业务链路通过。
 
 ## 数据与安全
 

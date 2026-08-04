@@ -30,3 +30,5 @@ class UserResponse(BaseModel):
     created_at: datetime
     updated_at: datetime
     last_login_at: datetime | None
+    deleted_at: datetime | None
+    deleted_by_id: int | None

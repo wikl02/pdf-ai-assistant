@@ -8,6 +8,7 @@ import {
   LogOut,
   Menu,
   MessageSquareText,
+  ScrollText,
   ShieldCheck,
   Users,
   X,
@@ -64,6 +65,10 @@ function logout() {
           <Users :size="18" />
           <span>用户管理</span>
         </el-menu-item>
+        <el-menu-item index="/admin/audit-logs">
+          <ScrollText :size="18" />
+          <span>审计日志</span>
+        </el-menu-item>
         <el-menu-item index="/app/chat">
           <MessageSquareText :size="18" />
           <span>知识查询</span>
@@ -90,7 +95,7 @@ function logout() {
             <span class="user-avatar">{{ auth.user?.display_name?.[0] || auth.user?.username[0] }}</span>
             <span class="user-menu-copy">
               <strong>{{ auth.user?.display_name || auth.user?.username }}</strong>
-              <small>管理员</small>
+              <small>{{ auth.isSuperAdmin ? '超级管理员' : '管理员' }}</small>
             </span>
             <ChevronDown :size="16" />
           </button>

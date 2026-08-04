@@ -6,6 +6,7 @@ from pydantic import BaseModel, Field
 class AskRequest(BaseModel):
     collection_id: str = Field(min_length=1, max_length=255)
     question: str = Field(min_length=1, max_length=5000)
+    conversation_id: int | None = None
 
 
 class SourceChunk(BaseModel):
@@ -17,6 +18,9 @@ class SourceChunk(BaseModel):
 class AskResponse(BaseModel):
     answer: str
     sources: list[SourceChunk]
+    conversation_id: int | None = None
+    user_message_id: int | None = None
+    assistant_message_id: int | None = None
 
 
 class UploadedDocument(BaseModel):

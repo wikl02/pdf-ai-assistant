@@ -12,7 +12,8 @@ export const useAuthStore = defineStore('auth', () => {
   const restoring = ref(false)
 
   const isAuthenticated = computed(() => Boolean(token.value))
-  const isAdmin = computed(() => user.value?.role === 'admin')
+  const isAdmin = computed(() => ['super_admin', 'admin'].includes(user.value?.role || ''))
+  const isSuperAdmin = computed(() => user.value?.role === 'super_admin')
 
   function persistToken(value: string) {
     token.value = value
@@ -58,6 +59,7 @@ export const useAuthStore = defineStore('auth', () => {
     restoring,
     isAuthenticated,
     isAdmin,
+    isSuperAdmin,
     login,
     logout,
     fetchCurrentUser,

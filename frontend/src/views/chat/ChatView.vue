@@ -1,20 +1,37 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, ref } from 'vue'
-import { BookOpen, Eraser, MessageSquarePlus, Send, Sparkles } from '@lucide/vue'
+import {
+  Eraser,
+  History,
+  MessageSquarePlus,
+  RefreshCw,
+  Send,
+  Sparkles,
+  Trash2,
+} from '@lucide/vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 
-import { askQuestionApi } from '../../api/chat'
+import {
+  askQuestionApi,
+  deleteConversationApi,
+  getConversationApi,
+  listConversationsApi,
+} from '../../api/chat'
 import { getErrorMessage } from '../../api/http'
 import { listAccessibleKnowledgeBasesApi } from '../../api/knowledge'
 import SourceList from '../../components/chat/SourceList.vue'
 import EmptyState from '../../components/common/EmptyState.vue'
-import type { ChatMessage, KnowledgeBase } from '../../types'
+import type { ChatMessage, ConversationSummary, KnowledgeBase } from '../../types'
 
 const knowledgeBases = ref<KnowledgeBase[]>([])
 const selectedKnowledgeBaseId = ref<number | null>(null)
+const conversations = ref<ConversationSummary[]>([])
+const currentConversationId = ref<number | null>(null)
 const messages = ref<ChatMessage[]>([])
 const question = ref('')
 const loadingKnowledgeBases = ref(true)
+const loadingConversations = ref(false)
+const loadingMessages = ref(false)
 const asking = ref(false)
 const errorMessage = ref('')
 const messageListRef = ref<HTMLElement>()
@@ -28,10 +45,10 @@ async function loadKnowledgeBases() {
   errorMessage.value = ''
   try {
     knowledgeBases.value = await listAccessibleKnowledgeBasesApi()
-    // 记住上次选择；若知识库已被删除，则自动回退到列表第一项。
     const savedId = Number(localStorage.getItem('enterprise_kb_selected_id'))
     const savedExists = knowledgeBases.value.some((item) => item.id === savedId)
     selectedKnowledgeBaseId.value = savedExists ? savedId : knowledgeBases.value[0]?.id || null
+    await loadConversations()
   } catch (error) {
     errorMessage.value = getErrorMessage(error, '知识库加载失败')
   } finally {
@@ -39,11 +56,52 @@ async function loadKnowledgeBases() {
   }
 }
 
-function selectKnowledgeBase(id: number) {
+async function loadConversations() {
+  if (!selectedKnowledgeBaseId.value) {
+    conversations.value = []
+    return
+  }
+  loadingConversations.value = true
+  try {
+    conversations.value = await listConversationsApi(selectedKnowledgeBaseId.value)
+  } catch (error) {
+    errorMessage.value = getErrorMessage(error, '历史会话加载失败')
+  } finally {
+    loadingConversations.value = false
+  }
+}
+
+async function selectKnowledgeBase(id: number) {
   if (selectedKnowledgeBaseId.value === id) return
   selectedKnowledgeBaseId.value = id
   localStorage.setItem('enterprise_kb_selected_id', String(id))
-  messages.value = []
+  newConversation(false)
+  await loadConversations()
+}
+
+async function openConversation(id: number) {
+  if (currentConversationId.value === id || loadingMessages.value) return
+  loadingMessages.value = true
+  errorMessage.value = ''
+  try {
+    const detail = await getConversationApi(id)
+    currentConversationId.value = id
+    selectedKnowledgeBaseId.value = detail.knowledge_base_id
+    messages.value = detail.messages.map((message) => ({
+      id: message.id,
+      role: message.role,
+      content: message.content,
+      sources: message.sources || [],
+      status: message.status === 'failed' ? 'error' : 'done',
+      response_time_ms: message.response_time_ms,
+      created_at: message.created_at,
+    }))
+    await scrollToBottom(false)
+  } catch (error) {
+    errorMessage.value = getErrorMessage(error, '会话内容加载失败')
+  } finally {
+    loadingMessages.value = false
+  }
 }
 
 function createMessage(role: ChatMessage['role'], content: string): ChatMessage {
@@ -55,9 +113,12 @@ function createMessage(role: ChatMessage['role'], content: string): ChatMessage 
   }
 }
 
-async function scrollToBottom() {
+async function scrollToBottom(smooth = true) {
   await nextTick()
-  messageListRef.value?.scrollTo({ top: messageListRef.value.scrollHeight, behavior: 'smooth' })
+  messageListRef.value?.scrollTo({
+    top: messageListRef.value.scrollHeight,
+    behavior: smooth ? 'smooth' : 'auto',
+  })
 }
 
 async function ask() {
@@ -70,7 +131,6 @@ async function ask() {
 
   messages.value.push(createMessage('user', content))
   question.value = ''
-  // 先插入 loading 消息，接口返回后原地更新，避免聊天区域发生布局跳动。
   const assistantMessage: ChatMessage = {
     id: `${Date.now()}-assistant`,
     role: 'assistant',
@@ -83,37 +143,58 @@ async function ask() {
   await scrollToBottom()
 
   try {
-    const response = await askQuestionApi(selectedKnowledgeBase.value.collection_name, content)
+    const response = await askQuestionApi(
+      selectedKnowledgeBase.value.collection_name,
+      content,
+      currentConversationId.value,
+    )
+    currentConversationId.value = response.conversation_id
+    assistantMessage.id = response.assistant_message_id || assistantMessage.id
     assistantMessage.content = response.answer
     assistantMessage.sources = response.sources
     assistantMessage.status = 'done'
+    await loadConversations()
   } catch (error) {
     assistantMessage.content = getErrorMessage(error, '回答生成失败，请稍后重试')
     assistantMessage.status = 'error'
+    await loadConversations()
   } finally {
     asking.value = false
     await scrollToBottom()
   }
 }
 
-function newConversation() {
+function newConversation(showMessage = true) {
+  currentConversationId.value = null
   messages.value = []
   question.value = ''
-  ElMessage.success('已创建新会话')
+  if (showMessage) ElMessage.success('已准备新会话')
+}
+
+async function removeConversation(id: number) {
+  try {
+    await ElMessageBox.confirm('确定删除这条历史会话吗？删除后无法恢复。', '删除会话', {
+      type: 'warning',
+      confirmButtonText: '删除',
+      cancelButtonText: '取消',
+    })
+    await deleteConversationApi(id)
+    if (currentConversationId.value === id) newConversation(false)
+    await loadConversations()
+    ElMessage.success('会话已删除')
+  } catch (error) {
+    if (error === 'cancel' || error === 'close') return
+    ElMessage.error(getErrorMessage(error, '删除会话失败'))
+  }
 }
 
 async function clearConversation() {
   if (!messages.value.length) return
-  try {
-    await ElMessageBox.confirm('确定清空当前会话吗？此操作无法撤销。', '清空会话', {
-      type: 'warning',
-      confirmButtonText: '清空',
-      cancelButtonText: '取消',
-    })
-    messages.value = []
-  } catch {
-    // User cancelled.
+  if (currentConversationId.value) {
+    await removeConversation(currentConversationId.value)
+    return
   }
+  newConversation(false)
 }
 
 onMounted(loadKnowledgeBases)
@@ -121,33 +202,69 @@ onMounted(loadKnowledgeBases)
 
 <template>
   <div class="query-workspace">
-    <aside class="knowledge-selector">
-      <div class="selector-heading">
+    <aside class="conversation-sidebar">
+      <div class="knowledge-picker">
+        <label for="knowledge-base-select">查询知识库</label>
+        <el-select
+          id="knowledge-base-select"
+          :model-value="selectedKnowledgeBaseId"
+          :loading="loadingKnowledgeBases"
+          placeholder="选择知识库"
+          @change="selectKnowledgeBase"
+        >
+          <el-option
+            v-for="item in knowledgeBases"
+            :key="item.id"
+            :label="item.name"
+            :value="item.id"
+          />
+        </el-select>
+      </div>
+
+      <div class="history-heading">
         <div>
-          <span>查询范围</span>
-          <strong>选择知识库</strong>
+          <History :size="16" />
+          <strong>历史会话</strong>
         </div>
-        <el-button circle text title="刷新知识库" :loading="loadingKnowledgeBases" @click="loadKnowledgeBases">
-          <BookOpen :size="17" />
+        <el-button circle text title="刷新历史" :loading="loadingConversations" @click="loadConversations">
+          <RefreshCw :size="16" />
         </el-button>
       </div>
 
-      <el-skeleton v-if="loadingKnowledgeBases" :rows="4" animated />
-      <nav v-else-if="knowledgeBases.length" class="knowledge-list">
-        <button
-          v-for="item in knowledgeBases"
+      <el-button class="new-conversation-button" type="primary" plain @click="newConversation()">
+        <MessageSquarePlus :size="16" />
+        新建会话
+      </el-button>
+
+      <div v-loading="loadingConversations" class="history-list">
+        <div
+          v-for="item in conversations"
           :key="item.id"
-          :class="['knowledge-list-item', { active: item.id === selectedKnowledgeBaseId }]"
-          @click="selectKnowledgeBase(item.id)"
+          :class="['history-item', { active: item.id === currentConversationId }]"
+          role="button"
+          tabindex="0"
+          @click="openConversation(item.id)"
+          @keydown.enter="openConversation(item.id)"
         >
-          <span class="knowledge-list-icon"><BookOpen :size="17" /></span>
           <span>
-            <strong>{{ item.name }}</strong>
-            <small>{{ item.document_count }} 个文档 · {{ item.chunk_count }} 个文本块</small>
+            <strong>{{ item.title }}</strong>
+            <small>{{ item.message_count }} 条消息 · {{ new Date(item.updated_at).toLocaleDateString('zh-CN') }}</small>
           </span>
-        </button>
-      </nav>
-      <EmptyState v-else title="暂无可查询知识库" description="请联系管理员添加知识库内容。" />
+          <button
+            class="history-delete"
+            type="button"
+            title="删除会话"
+            @click.stop="removeConversation(item.id)"
+          >
+            <Trash2 :size="14" />
+          </button>
+        </div>
+        <EmptyState
+          v-if="!loadingConversations && !conversations.length"
+          title="暂无历史会话"
+          description="发送第一个问题后，会话会保存在这里。"
+        />
+      </div>
     </aside>
 
     <section class="conversation-panel">
@@ -157,21 +274,21 @@ onMounted(loadKnowledgeBases)
           <strong>{{ selectedKnowledgeBase?.name || '尚未选择' }}</strong>
         </div>
         <div class="conversation-actions">
-          <el-button @click="newConversation">
+          <el-button @click="newConversation()">
             <MessageSquarePlus :size="16" />
             新建会话
           </el-button>
           <el-button :disabled="!messages.length" @click="clearConversation">
             <Eraser :size="16" />
-            清空
+            删除当前会话
           </el-button>
         </div>
       </header>
 
-      <el-alert v-if="errorMessage" :title="errorMessage" type="error" show-icon :closable="false" />
+      <el-alert v-if="errorMessage" :title="errorMessage" type="error" show-icon closable @close="errorMessage = ''" />
 
-      <div ref="messageListRef" class="message-list">
-        <div v-if="!messages.length" class="conversation-empty">
+      <div ref="messageListRef" v-loading="loadingMessages" class="message-list">
+        <div v-if="!messages.length && !loadingMessages" class="conversation-empty">
           <span><Sparkles :size="26" /></span>
           <h1>开始查询企业知识</h1>
           <p>{{ selectedKnowledgeBase ? `当前范围：${selectedKnowledgeBase.name}` : '请先选择一个知识库' }}</p>

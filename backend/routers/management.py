@@ -10,6 +10,7 @@ from backend.dependencies.auth import AdminUser
 from backend.schemas.knowledge import UploadResponse
 from backend.schemas.management import (
     DocumentResponse,
+    DocumentLifecycleResponse,
     DocumentUploadResponse,
     KnowledgeBaseCreate,
     KnowledgeBaseDetail,
@@ -20,10 +21,12 @@ from backend.services.management_service import (
     create_knowledge_base,
     delete_document,
     get_knowledge_base_detail,
+    get_document_lifecycle,
     list_documents,
     list_knowledge_bases,
     reindex_document,
     upload_document,
+    upload_document_version,
 )
 
 
@@ -48,6 +51,7 @@ def add_knowledge_base(
     knowledge_base = create_knowledge_base(db, payload, current_user)
     audit_event(
         "knowledge_base_created",
+        db=db,
         actor_id=current_user.id,
         actor_name=current_user.username,
         knowledge_base_id=knowledge_base.id,
@@ -94,6 +98,7 @@ async def add_documents(
     detail = get_knowledge_base_detail(db, knowledge_base_id)
     audit_event(
         "documents_uploaded",
+        db=db,
         actor_id=current_user.id,
         actor_name=current_user.username,
         knowledge_base_id=knowledge_base_id,
@@ -136,6 +141,7 @@ def remove_document(
     delete_document(db, knowledge_base_id, document_id)
     audit_event(
         "document_deleted",
+        db=db,
         actor_id=current_user.id,
         actor_name=current_user.username,
         knowledge_base_id=knowledge_base_id,
@@ -154,13 +160,61 @@ def rebuild_document_index(
     current_user: AdminUser,
     db: Annotated[Session, Depends(get_db)],
 ) -> DocumentResponse:
-    document = reindex_document(db, knowledge_base_id, document_id)
+    document = reindex_document(db, knowledge_base_id, document_id, current_user)
     audit_event(
         "document_reindexed",
+        db=db,
         actor_id=current_user.id,
         actor_name=current_user.username,
         knowledge_base_id=knowledge_base_id,
         document_id=document_id,
+        chunk_count=document.chunk_count,
+    )
+    return DocumentResponse.model_validate(document)
+
+
+@router.get(
+    "/{knowledge_base_id}/documents/{document_id}/lifecycle",
+    response_model=DocumentLifecycleResponse,
+)
+def get_document_history(
+    knowledge_base_id: int,
+    document_id: int,
+    _: AdminUser,
+    db: Annotated[Session, Depends(get_db)],
+) -> DocumentLifecycleResponse:
+    return DocumentLifecycleResponse.model_validate(
+        get_document_lifecycle(db, knowledge_base_id, document_id)
+    )
+
+
+@router.post(
+    "/{knowledge_base_id}/documents/{document_id}/versions",
+    response_model=DocumentResponse,
+)
+async def add_document_version(
+    knowledge_base_id: int,
+    document_id: int,
+    file: Annotated[UploadFile, File(...)],
+    current_user: AdminUser,
+    db: Annotated[Session, Depends(get_db)],
+) -> DocumentResponse:
+    document = upload_document_version(
+        db,
+        knowledge_base_id,
+        document_id,
+        current_user,
+        file.filename or "document",
+        await file.read(),
+    )
+    audit_event(
+        "document_version_uploaded",
+        db=db,
+        actor_id=current_user.id,
+        actor_name=current_user.username,
+        knowledge_base_id=knowledge_base_id,
+        document_id=document.id,
+        version_number=document.current_version_number,
         chunk_count=document.chunk_count,
     )
     return DocumentResponse.model_validate(document)
@@ -201,6 +255,7 @@ async def compatibility_upload(
         )
     audit_event(
         "compatibility_upload",
+        db=db,
         actor_id=current_user.id,
         actor_name=current_user.username,
         knowledge_base_id=knowledge_base.id,

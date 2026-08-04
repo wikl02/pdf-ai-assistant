@@ -15,6 +15,8 @@ from backend.schemas.management import MessageResponse
 from backend.schemas.user import UserResponse
 from backend.services.admin_user_service import (
     reset_user_password,
+    restore_user,
+    soft_delete_user,
     update_user_role,
     update_user_status,
 )
@@ -33,6 +35,7 @@ def change_user_status(
     user = update_user_status(db, user_id, payload.is_active, current_user)
     audit_event(
         "user_status_changed",
+        db=db,
         actor_id=current_user.id,
         actor_name=current_user.username,
         target_user_id=user.id,
@@ -51,6 +54,7 @@ def change_user_role(
     user = update_user_role(db, user_id, payload.role, current_user)
     audit_event(
         "user_role_changed",
+        db=db,
         actor_id=current_user.id,
         actor_name=current_user.username,
         target_user_id=user.id,
@@ -66,11 +70,48 @@ def change_user_password(
     current_user: AdminUser,
     db: Annotated[Session, Depends(get_db)],
 ) -> MessageResponse:
-    reset_user_password(db, user_id, payload.password)
+    reset_user_password(db, user_id, payload.password, current_user)
     audit_event(
         "user_password_reset",
+        db=db,
         actor_id=current_user.id,
         actor_name=current_user.username,
         target_user_id=user_id,
     )
     return MessageResponse(message="密码已重置")
+
+
+@router.delete("/{user_id}", response_model=UserResponse)
+def delete_user(
+    user_id: int,
+    current_user: AdminUser,
+    db: Annotated[Session, Depends(get_db)],
+) -> UserResponse:
+    user = soft_delete_user(db, user_id, current_user)
+    audit_event(
+        "user_deleted",
+        db=db,
+        actor_id=current_user.id,
+        actor_name=current_user.username,
+        target_user_id=user.id,
+        target_role=user.role,
+    )
+    return UserResponse.model_validate(user)
+
+
+@router.post("/{user_id}/restore", response_model=UserResponse)
+def recover_user(
+    user_id: int,
+    current_user: AdminUser,
+    db: Annotated[Session, Depends(get_db)],
+) -> UserResponse:
+    user = restore_user(db, user_id, current_user)
+    audit_event(
+        "user_restored",
+        db=db,
+        actor_id=current_user.id,
+        actor_name=current_user.username,
+        target_user_id=user.id,
+        target_role=user.role,
+    )
+    return UserResponse.model_validate(user)

@@ -4,7 +4,9 @@
 """
 
 import logging
+from datetime import datetime, timezone
 from pathlib import Path
+from time import perf_counter
 from uuid import uuid4
 
 from fastapi import HTTPException, status
@@ -14,7 +16,11 @@ from sqlalchemy.orm import Session, selectinload
 from backend.core.config import settings
 from backend.models.knowledge import (
     Document,
+    DocumentIndexTask,
     DocumentStatus,
+    DocumentVersion,
+    IndexTaskStatus,
+    IndexTaskTrigger,
     KnowledgeBase,
     KnowledgeBaseDocument,
 )
@@ -79,18 +85,19 @@ def knowledge_base_to_dict(knowledge_base: KnowledgeBase) -> dict:
     }
 
 
-def list_knowledge_bases(db: Session) -> list[dict]:
-    items = list(
-        db.scalars(
-            select(KnowledgeBase)
-            .options(
-                selectinload(KnowledgeBase.document_links).selectinload(
-                    KnowledgeBaseDocument.document
-                )
-            )
-            .order_by(KnowledgeBase.created_at.desc())
+def list_knowledge_bases(
+    db: Session, knowledge_base_ids: set[int] | None = None
+) -> list[dict]:
+    statement = select(KnowledgeBase).options(
+        selectinload(KnowledgeBase.document_links).selectinload(
+            KnowledgeBaseDocument.document
         )
     )
+    if knowledge_base_ids is not None:
+        if not knowledge_base_ids:
+            return []
+        statement = statement.where(KnowledgeBase.id.in_(knowledge_base_ids))
+    items = list(db.scalars(statement.order_by(KnowledgeBase.created_at.desc())))
     return [knowledge_base_to_dict(item) for item in items]
 
 
@@ -148,11 +155,33 @@ def _process_document(
     db: Session,
     knowledge_base: KnowledgeBase,
     document: Document,
+    trigger: IndexTaskTrigger,
+    initiated_by_id: int | None,
 ) -> Document:
+    version = db.scalar(
+        select(DocumentVersion).where(
+            DocumentVersion.document_id == document.id,
+            DocumentVersion.version_number == document.current_version_number,
+        )
+    )
+    task = DocumentIndexTask(
+        document_id=document.id,
+        knowledge_base_id=knowledge_base.id,
+        version_number=document.current_version_number,
+        trigger=trigger.value,
+        status=IndexTaskStatus.PROCESSING.value,
+        initiated_by_id=initiated_by_id,
+        started_at=datetime.now(timezone.utc),
+    )
+    db.add(task)
     # 先落库“处理中”状态，让失败后仍能在管理页面看到并执行重新索引。
     document.status = DocumentStatus.PROCESSING.value
     document.error_message = None
+    if version:
+        version.status = DocumentStatus.PROCESSING.value
+        version.error_message = None
     db.commit()
+    started_at = perf_counter()
 
     try:
         # 解析器保留页码、行号、段落或表格行等来源位置，供回答引用。
@@ -165,10 +194,20 @@ def _process_document(
         # 这里会计算 Embedding，并只替换当前文档在 collection 中的文本块。
         index_document_chunks(knowledge_base.collection_name, document.id, chunks)
     except Exception as exc:
+        duration_ms = round((perf_counter() - started_at) * 1000)
+        error_message = str(exc)[:1000]
         logger.exception("document indexing failed document_id=%s", document.id)
         document.status = DocumentStatus.FAILED.value
         document.chunk_count = 0
-        document.error_message = str(exc)[:1000]
+        document.error_message = error_message
+        if version:
+            version.status = DocumentStatus.FAILED.value
+            version.chunk_count = 0
+            version.error_message = error_message
+        task.status = IndexTaskStatus.FAILED.value
+        task.error_message = error_message
+        task.duration_ms = duration_ms
+        task.completed_at = datetime.now(timezone.utc)
         db.commit()
         raise HTTPException(
             status_code=400,
@@ -178,6 +217,15 @@ def _process_document(
     document.status = DocumentStatus.READY.value
     document.chunk_count = len(chunks)
     document.error_message = None
+    if version:
+        version.status = DocumentStatus.READY.value
+        version.chunk_count = len(chunks)
+        version.error_message = None
+    task.status = IndexTaskStatus.SUCCEEDED.value
+    task.chunk_count = len(chunks)
+    task.error_message = None
+    task.duration_ms = round((perf_counter() - started_at) * 1000)
+    task.completed_at = datetime.now(timezone.utc)
     db.commit()
     db.refresh(document)
     logger.info(
@@ -222,6 +270,7 @@ def upload_document(
         storage_path=str(storage_path),
         status=DocumentStatus.PENDING.value,
         chunk_count=0,
+        current_version_number=1,
         uploaded_by_id=current_user.id,
     )
     db.add(document)
@@ -232,19 +281,120 @@ def upload_document(
             document_id=document.id,
         )
     )
+    db.add(
+        DocumentVersion(
+            document_id=document.id,
+            version_number=1,
+            filename=document.filename,
+            file_type=document.file_type,
+            file_size=document.file_size,
+            sha256=document.sha256,
+            storage_path=document.storage_path,
+            status=DocumentStatus.PENDING.value,
+            chunk_count=0,
+            created_by_id=current_user.id,
+        )
+    )
     db.commit()
     db.refresh(document)
     # 当前版本同步建立索引，因此较大文档或模型冷启动时请求会等待较久。
-    return _process_document(db, knowledge_base, document)
+    return _process_document(
+        db,
+        knowledge_base,
+        document,
+        IndexTaskTrigger.UPLOAD,
+        current_user.id,
+    )
 
 
 def reindex_document(
-    db: Session, knowledge_base_id: int, document_id: int
+    db: Session, knowledge_base_id: int, document_id: int, current_user: User
 ) -> Document:
     link = _document_link_or_404(db, knowledge_base_id, document_id)
     if not Path(link.document.storage_path).is_file():
         raise HTTPException(status_code=404, detail="文档原始文件不存在，无法重新索引")
-    return _process_document(db, link.knowledge_base, link.document)
+    return _process_document(
+        db,
+        link.knowledge_base,
+        link.document,
+        IndexTaskTrigger.REINDEX,
+        current_user.id,
+    )
+
+
+def upload_document_version(
+    db: Session,
+    knowledge_base_id: int,
+    document_id: int,
+    current_user: User,
+    filename: str,
+    file_bytes: bytes,
+) -> Document:
+    link = _document_link_or_404(db, knowledge_base_id, document_id)
+    document = link.document
+    file_info = build_file_info(Path(filename).name, file_bytes)
+    if file_info["hash"] == document.sha256:
+        raise HTTPException(status_code=409, detail="新版本内容与当前版本相同")
+
+    storage_path = _storage_path(filename)
+    storage_path.write_bytes(file_bytes)
+    version_number = document.current_version_number + 1
+    document.filename = file_info["name"]
+    document.file_type = file_info["type"]
+    document.file_size = file_info["size"]
+    document.sha256 = file_info["hash"]
+    document.storage_path = str(storage_path)
+    document.current_version_number = version_number
+    document.status = DocumentStatus.PENDING.value
+    document.chunk_count = 0
+    document.error_message = None
+    db.add(
+        DocumentVersion(
+            document_id=document.id,
+            version_number=version_number,
+            filename=document.filename,
+            file_type=document.file_type,
+            file_size=document.file_size,
+            sha256=document.sha256,
+            storage_path=document.storage_path,
+            status=DocumentStatus.PENDING.value,
+            chunk_count=0,
+            created_by_id=current_user.id,
+        )
+    )
+    db.commit()
+    db.refresh(document)
+    return _process_document(
+        db,
+        link.knowledge_base,
+        document,
+        IndexTaskTrigger.VERSION_UPLOAD,
+        current_user.id,
+    )
+
+
+def get_document_lifecycle(
+    db: Session, knowledge_base_id: int, document_id: int
+) -> dict:
+    link = _document_link_or_404(db, knowledge_base_id, document_id)
+    versions = list(
+        db.scalars(
+            select(DocumentVersion)
+            .where(DocumentVersion.document_id == document_id)
+            .order_by(DocumentVersion.version_number.desc())
+        )
+    )
+    tasks = list(
+        db.scalars(
+            select(DocumentIndexTask)
+            .where(
+                DocumentIndexTask.document_id == document_id,
+                DocumentIndexTask.knowledge_base_id == knowledge_base_id,
+            )
+            .order_by(DocumentIndexTask.created_at.desc())
+        )
+    )
+    return {"document": link.document, "versions": versions, "index_tasks": tasks}
 
 
 def delete_document(db: Session, knowledge_base_id: int, document_id: int) -> None:
@@ -264,13 +414,23 @@ def delete_document(db: Session, knowledge_base_id: int, document_id: int) -> No
     )
     db.delete(link)
     delete_file = remaining_links == 0
-    storage_path = Path(document.storage_path)
+    storage_paths = set(
+        db.scalars(
+            select(DocumentVersion.storage_path).where(
+                DocumentVersion.document_id == document.id
+            )
+        )
+    )
+    storage_paths.add(document.storage_path)
     if delete_file:
         db.delete(document)
     db.commit()
 
-    if delete_file and storage_path.is_file():
-        storage_path.unlink()
+    if delete_file:
+        for value in storage_paths:
+            storage_path = Path(value)
+            if storage_path.is_file():
+                storage_path.unlink()
     logger.info(
         "document deleted document_id=%s knowledge_base_id=%s",
         document_id,

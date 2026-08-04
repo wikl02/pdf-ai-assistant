@@ -2,7 +2,7 @@ from datetime import datetime, timezone
 from enum import StrEnum
 from typing import TYPE_CHECKING
 
-from sqlalchemy import Boolean, DateTime, String
+from sqlalchemy import Boolean, DateTime, Integer, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from backend.database import Base
@@ -16,6 +16,7 @@ def utc_now() -> datetime:
 
 
 class UserRole(StrEnum):
+    SUPER_ADMIN = "super_admin"
     ADMIN = "admin"
     USER = "user"
 
@@ -34,6 +35,10 @@ class User(Base):
         DateTime(timezone=True), default=utc_now, onupdate=utc_now
     )
     last_login_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    deleted_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True, index=True
+    )
+    deleted_by_id: Mapped[int | None] = mapped_column(Integer, nullable=True, index=True)
 
     created_knowledge_bases: Mapped[list["KnowledgeBase"]] = relationship(
         back_populates="created_by"

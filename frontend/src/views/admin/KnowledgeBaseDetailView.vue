@@ -1,21 +1,24 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { ArrowLeft, FileUp, RefreshCw, RotateCw, Trash2 } from '@lucide/vue'
+import { ArrowLeft, FileClock, FileUp, RefreshCw, RotateCw, Trash2 } from '@lucide/vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 
 import { getErrorMessage } from '../../api/http'
 import {
   deleteDocumentApi,
+  getDocumentLifecycleApi,
   getKnowledgeBaseApi,
   reindexDocumentApi,
   uploadDocumentsApi,
+  uploadDocumentVersionApi,
 } from '../../api/knowledge'
 import DocumentStatusTag from '../../components/common/DocumentStatusTag.vue'
 import EmptyState from '../../components/common/EmptyState.vue'
 import PageHeader from '../../components/common/PageHeader.vue'
 import DocumentUploadDialog from '../../components/knowledge/DocumentUploadDialog.vue'
-import type { KnowledgeBaseDetail } from '../../types'
+import DocumentLifecycleDialog from '../../components/knowledge/DocumentLifecycleDialog.vue'
+import type { DocumentLifecycle, KnowledgeBaseDetail } from '../../types'
 
 const route = useRoute()
 const router = useRouter()
@@ -26,6 +29,10 @@ const uploading = ref(false)
 const uploadDialogOpen = ref(false)
 const errorMessage = ref('')
 const processingDocumentId = ref<number | null>(null)
+const lifecycleOpen = ref(false)
+const lifecycleLoading = ref(false)
+const lifecycleUploading = ref(false)
+const lifecycle = ref<DocumentLifecycle | null>(null)
 
 function formatSize(size: number) {
   return size < 1024 * 1024
@@ -92,6 +99,40 @@ async function reindex(documentId: number) {
   }
 }
 
+async function loadLifecycle(documentId = lifecycle.value?.document.id) {
+  if (!documentId) return
+  lifecycleLoading.value = true
+  try {
+    lifecycle.value = await getDocumentLifecycleApi(knowledgeBaseId.value, documentId)
+  } catch (error) {
+    ElMessage.error(getErrorMessage(error, '文档生命周期加载失败'))
+  } finally {
+    lifecycleLoading.value = false
+  }
+}
+
+async function openLifecycle(documentId: number) {
+  lifecycle.value = null
+  lifecycleOpen.value = true
+  await loadLifecycle(documentId)
+}
+
+async function uploadVersion(file: File) {
+  const documentId = lifecycle.value?.document.id
+  if (!documentId) return
+  lifecycleUploading.value = true
+  try {
+    await uploadDocumentVersionApi(knowledgeBaseId.value, documentId, file)
+    ElMessage.success('新版本上传并建立索引成功')
+    await Promise.all([loadLifecycle(documentId), loadDetail()])
+  } catch (error) {
+    ElMessage.error(getErrorMessage(error, '新版本上传失败'))
+    await loadLifecycle(documentId)
+  } finally {
+    lifecycleUploading.value = false
+  }
+}
+
 onMounted(loadDetail)
 </script>
 
@@ -147,12 +188,19 @@ onMounted(loadDetail)
             <DocumentStatusTag :status="scope.row.status" />
           </template>
         </el-table-column>
+        <el-table-column label="版本" width="80">
+          <template #default="scope">V{{ scope.row.current_version_number }}</template>
+        </el-table-column>
         <el-table-column prop="chunk_count" label="文本块" width="100" align="right" />
         <el-table-column label="上传时间" width="180">
           <template #default="scope">{{ new Date(scope.row.created_at).toLocaleString('zh-CN') }}</template>
         </el-table-column>
-        <el-table-column label="操作" width="190" fixed="right">
+        <el-table-column label="操作" width="280" fixed="right">
           <template #default="scope">
+            <el-button text type="primary" @click="openLifecycle(scope.row.id)">
+              <FileClock :size="15" />
+              生命周期
+            </el-button>
             <el-button
               text
               type="primary"
@@ -190,6 +238,14 @@ onMounted(loadDetail)
       v-model="uploadDialogOpen"
       :loading="uploading"
       @submit="upload"
+    />
+    <DocumentLifecycleDialog
+      v-model="lifecycleOpen"
+      :lifecycle="lifecycle"
+      :loading="lifecycleLoading"
+      :upload-loading="lifecycleUploading"
+      @refresh="loadLifecycle()"
+      @upload-version="uploadVersion"
     />
   </section>
 </template>

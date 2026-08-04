@@ -39,7 +39,7 @@ def get_current_user(
         raise unauthorized from None
     # 每次请求都重新读取用户，确保禁用账号后旧 JWT 也会立即失效。
     user = get_user_by_id(db, user_id)
-    if not user or not user.is_active:
+    if not user or not user.is_active or user.deleted_at is not None:
         raise unauthorized
     return user
 
@@ -59,8 +59,11 @@ def require_roles(*allowed_roles: UserRole) -> Callable:
 
 # 路由参数使用这些别名即可同时获得认证后的 User 对象和权限校验。
 CurrentUser = Annotated[User, Depends(get_current_user)]
-AdminUser = Annotated[User, Depends(require_roles(UserRole.ADMIN))]
+AdminUser = Annotated[
+    User, Depends(require_roles(UserRole.SUPER_ADMIN, UserRole.ADMIN))
+]
+SuperAdminUser = Annotated[User, Depends(require_roles(UserRole.SUPER_ADMIN))]
 KnowledgeUser = Annotated[
     User,
-    Depends(require_roles(UserRole.ADMIN, UserRole.USER)),
+    Depends(require_roles(UserRole.SUPER_ADMIN, UserRole.ADMIN, UserRole.USER)),
 ]

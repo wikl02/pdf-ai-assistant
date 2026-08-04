@@ -1,6 +1,7 @@
 import http from './http'
 import type {
   DocumentUploadResponse,
+  DocumentLifecycle,
   KnowledgeBase,
   KnowledgeBaseDetail,
   KnowledgeDocument,
@@ -58,6 +59,31 @@ export async function reindexDocumentApi(
 ): Promise<KnowledgeDocument> {
   const { data } = await http.post<KnowledgeDocument>(
     `/api/admin/knowledge-bases/${knowledgeBaseId}/documents/${documentId}/reindex`,
+  )
+  return data
+}
+
+export async function getDocumentLifecycleApi(
+  knowledgeBaseId: number,
+  documentId: number,
+): Promise<DocumentLifecycle> {
+  const { data } = await http.get<DocumentLifecycle>(
+    `/api/admin/knowledge-bases/${knowledgeBaseId}/documents/${documentId}/lifecycle`,
+  )
+  return data
+}
+
+export async function uploadDocumentVersionApi(
+  knowledgeBaseId: number,
+  documentId: number,
+  file: File,
+): Promise<KnowledgeDocument> {
+  const form = new FormData()
+  form.append('file', file)
+  const { data } = await http.post<KnowledgeDocument>(
+    `/api/admin/knowledge-bases/${knowledgeBaseId}/documents/${documentId}/versions`,
+    form,
+    { timeout: 900_000 },
   )
   return data
 }

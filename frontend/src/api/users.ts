@@ -31,3 +31,13 @@ export async function updateUserRoleApi(id: number, role: UserRole): Promise<Use
 export async function resetUserPasswordApi(id: number, password: string): Promise<void> {
   await http.post(`/api/admin/users/${id}/reset-password`, { password })
 }
+
+export async function deleteUserApi(id: number): Promise<User> {
+  const { data } = await http.delete<User>(`/api/admin/users/${id}`)
+  return data
+}
+
+export async function restoreUserApi(id: number): Promise<User> {
+  const { data } = await http.post<User>(`/api/admin/users/${id}/restore`)
+  return data
+}

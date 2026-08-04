@@ -7,7 +7,18 @@ from starlette.middleware.trustedhost import TrustedHostMiddleware
 
 from backend.core.config import settings
 from backend.database import init_database, session_scope
-from backend.routers import admin_users, auth, catalog, health, knowledge, management, users
+from backend.routers import (
+    access_control,
+    admin_users,
+    audit_logs,
+    auth,
+    catalog,
+    conversations,
+    health,
+    knowledge,
+    management,
+    users,
+)
 from backend.services.user_service import ensure_bootstrap_admin
 
 
@@ -35,7 +46,7 @@ async def lifespan(_: FastAPI):
 def create_app() -> FastAPI:
     application = FastAPI(
         title="企业知识库智能助手 API",
-        version="0.4.0",
+        version="0.7.0",
         lifespan=lifespan,
         docs_url="/docs" if settings.api_docs_enabled else None,
         redoc_url="/redoc" if settings.api_docs_enabled else None,
@@ -49,16 +60,19 @@ def create_app() -> FastAPI:
         CORSMiddleware,
         allow_origins=settings.cors_origins,
         allow_credentials=True,
-        allow_methods=["GET", "POST", "PATCH", "DELETE", "OPTIONS"],
+        allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
         allow_headers=["Authorization", "Content-Type", "Accept"],
     )
     application.include_router(health.router)
     application.include_router(auth.router)
     application.include_router(users.router)
     application.include_router(admin_users.router)
+    application.include_router(access_control.router)
+    application.include_router(audit_logs.router)
     application.include_router(management.router)
     application.include_router(management.compatibility_router)
     application.include_router(catalog.router)
+    application.include_router(conversations.router)
     application.include_router(knowledge.router)
     return application
 

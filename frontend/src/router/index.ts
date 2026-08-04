@@ -52,6 +52,12 @@ const router = createRouter({
           component: () => import('../views/admin/UsersView.vue'),
           meta: { requiresAuth: true, adminOnly: true, title: '用户管理' },
         },
+        {
+          path: 'audit-logs',
+          name: 'admin-audit-logs',
+          component: () => import('../views/admin/AuditLogsView.vue'),
+          meta: { requiresAuth: true, adminOnly: true, title: '审计日志' },
+        },
       ],
     },
     {

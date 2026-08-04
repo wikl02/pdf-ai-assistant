@@ -78,7 +78,7 @@ def test_compatibility_upload_keeps_streamlit_response_shape(api):
 
 
 def test_admin_user_management(api):
-    headers = login_headers(api.client, "admin", "Admin123!")
+    headers = login_headers(api.client, "root_admin", "RootAdmin123!")
     created = api.client.post(
         "/api/admin/users",
         headers=headers,

@@ -27,9 +27,10 @@ def add_user(
     current_user: AdminUser,
     db: Annotated[Session, Depends(get_db)],
 ) -> UserResponse:
-    user = create_user(db, payload)
+    user = create_user(db, payload, current_user)
     audit_event(
         "user_created",
+        db=db,
         actor_id=current_user.id,
         actor_name=current_user.username,
         target_user_id=user.id,

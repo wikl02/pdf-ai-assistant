@@ -1,5 +1,7 @@
-export type UserRole = 'admin' | 'user'
+export type UserRole = 'super_admin' | 'admin' | 'user'
 export type DocumentStatus = 'pending' | 'processing' | 'ready' | 'failed'
+export type IndexTaskStatus = 'pending' | 'processing' | 'succeeded' | 'failed'
+export type IndexTaskTrigger = 'upload' | 'version_upload' | 'reindex'
 
 export interface User {
   id: number
@@ -10,6 +12,8 @@ export interface User {
   created_at: string
   updated_at: string
   last_login_at: string | null
+  deleted_at: string | null
+  deleted_by_id: number | null
 }
 
 export interface LoginResponse {
@@ -41,9 +45,47 @@ export interface KnowledgeDocument {
   status: DocumentStatus
   chunk_count: number
   error_message: string | null
+  current_version_number: number
   uploaded_by_id: number
   created_at: string
   updated_at: string
+}
+
+export interface DocumentVersion {
+  id: number
+  document_id: number
+  version_number: number
+  filename: string
+  file_type: string
+  file_size: number
+  sha256: string
+  status: DocumentStatus
+  chunk_count: number
+  error_message: string | null
+  created_by_id: number | null
+  created_at: string
+}
+
+export interface DocumentIndexTask {
+  id: number
+  document_id: number
+  knowledge_base_id: number
+  version_number: number
+  trigger: IndexTaskTrigger
+  status: IndexTaskStatus
+  chunk_count: number
+  error_message: string | null
+  duration_ms: number | null
+  initiated_by_id: number | null
+  started_at: string | null
+  completed_at: string | null
+  created_at: string
+}
+
+export interface DocumentLifecycle {
+  document: KnowledgeDocument
+  versions: DocumentVersion[]
+  index_tasks: DocumentIndexTask[]
 }
 
 export interface KnowledgeBaseDetail extends KnowledgeBase {
@@ -79,12 +121,68 @@ export interface SourceChunk {
 export interface AskResponse {
   answer: string
   sources: SourceChunk[]
+  conversation_id: number | null
+  user_message_id: number | null
+  assistant_message_id: number | null
 }
 
 export interface ChatMessage {
-  id: string
+  id: string | number
   role: 'user' | 'assistant'
   content: string
   sources?: SourceChunk[]
   status?: 'loading' | 'error' | 'done'
+  response_time_ms?: number | null
+  created_at?: string
+}
+
+export interface ConversationSummary {
+  id: number
+  user_id: number
+  knowledge_base_id: number
+  knowledge_base_name: string
+  title: string
+  message_count: number
+  created_at: string
+  updated_at: string
+}
+
+export interface ConversationDetail extends ConversationSummary {
+  messages: Array<{
+    id: number
+    conversation_id: number
+    role: 'user' | 'assistant'
+    content: string
+    sources: SourceChunk[] | null
+    status: 'complete' | 'failed'
+    response_time_ms: number | null
+    created_at: string
+  }>
+}
+
+export interface AuditLog {
+  id: number
+  event: string
+  outcome: 'success' | 'failed'
+  actor_id: number | null
+  actor_name: string | null
+  client_ip: string | null
+  details: Record<string, unknown> | null
+  created_at: string
+}
+
+export interface AuditLogList {
+  items: AuditLog[]
+  total: number
+  page: number
+  page_size: number
+}
+
+export interface UsageSummary {
+  audit_event_count: number
+  question_count: number
+  failed_event_count: number
+  active_user_count: number
+  conversation_count: number
+  message_count: number
 }

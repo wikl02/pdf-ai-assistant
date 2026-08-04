@@ -5,7 +5,22 @@ from sqlalchemy import engine_from_config, pool
 
 from backend.core.config import settings
 from backend.database import Base
-from backend.models import Document, KnowledgeBase, KnowledgeBaseDocument, User  # noqa: F401
+from backend.models import (  # noqa: F401
+    AuditLog,
+    ChatConversation,
+    ChatMessage,
+    Department,
+    Document,
+    DocumentIndexTask,
+    DocumentVersion,
+    KnowledgeBase,
+    KnowledgeBaseDepartmentPermission,
+    KnowledgeBaseDocument,
+    KnowledgeBaseRolePermission,
+    KnowledgeBaseUserPermission,
+    User,
+    UserDepartment,
+)
 
 
 config = context.config

@@ -21,10 +21,15 @@ def list_users(db: Session) -> list[User]:
     return list(db.scalars(select(User).order_by(User.created_at.desc())))
 
 
-def create_user(db: Session, payload: UserCreate) -> User:
+def create_user(db: Session, payload: UserCreate, current_user: User) -> User:
     username = payload.username.strip()
     if db.scalar(select(User).where(User.username == username)):
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="用户名已存在")
+    if (
+        current_user.role != UserRole.SUPER_ADMIN.value
+        and payload.role != UserRole.USER
+    ):
+        raise HTTPException(status_code=403, detail="普通管理员只能创建普通用户")
     user = User(
         username=username,
         password_hash=hash_password(payload.password),
@@ -45,15 +50,18 @@ def ensure_bootstrap_admin(db: Session) -> None:
         return
     existing = db.scalar(select(User).where(User.username == username.strip()))
     if existing:
-        if existing.role != UserRole.ADMIN.value:
-            existing.role = UserRole.ADMIN.value
+        if existing.role != UserRole.SUPER_ADMIN.value:
+            existing.role = UserRole.SUPER_ADMIN.value
+            existing.is_active = True
+            existing.deleted_at = None
+            existing.deleted_by_id = None
             db.commit()
         return
     admin = User(
         username=username.strip(),
         password_hash=hash_password(password),
         display_name="系统管理员",
-        role=UserRole.ADMIN.value,
+        role=UserRole.SUPER_ADMIN.value,
         is_active=True,
     )
     db.add(admin)

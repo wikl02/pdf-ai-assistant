@@ -2,7 +2,7 @@ from datetime import datetime
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from backend.models.knowledge import DocumentStatus
+from backend.models.knowledge import DocumentStatus, IndexTaskStatus, IndexTaskTrigger
 
 
 class KnowledgeBaseCreate(BaseModel):
@@ -36,6 +36,7 @@ class DocumentResponse(BaseModel):
     status: DocumentStatus
     chunk_count: int
     error_message: str | None
+    current_version_number: int
     uploaded_by_id: int
     created_at: datetime
     updated_at: datetime
@@ -55,3 +56,44 @@ class DocumentUploadResponse(BaseModel):
 
 class MessageResponse(BaseModel):
     message: str
+
+
+class DocumentVersionResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    document_id: int
+    version_number: int
+    filename: str
+    file_type: str
+    file_size: int
+    sha256: str
+    status: DocumentStatus
+    chunk_count: int
+    error_message: str | None
+    created_by_id: int | None
+    created_at: datetime
+
+
+class DocumentIndexTaskResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    document_id: int
+    knowledge_base_id: int
+    version_number: int
+    trigger: IndexTaskTrigger
+    status: IndexTaskStatus
+    chunk_count: int
+    error_message: str | None
+    duration_ms: int | None
+    initiated_by_id: int | None
+    started_at: datetime | None
+    completed_at: datetime | None
+    created_at: datetime
+
+
+class DocumentLifecycleResponse(BaseModel):
+    document: DocumentResponse
+    versions: list[DocumentVersionResponse]
+    index_tasks: list[DocumentIndexTaskResponse]

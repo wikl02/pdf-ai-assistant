@@ -31,6 +31,7 @@ def login(
     if not user:
         audit_event(
             "login",
+            db=db,
             outcome="failed",
             actor_name=payload.username.strip(),
             client_ip=client_ip,
@@ -44,6 +45,7 @@ def login(
     )
     audit_event(
         "login",
+        db=db,
         actor_id=user.id,
         actor_name=user.username,
         client_ip=client_ip,

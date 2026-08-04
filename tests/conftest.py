@@ -27,6 +27,13 @@ def api(tmp_path, monkeypatch):
         db.add_all(
             [
                 User(
+                    username="root_admin",
+                    password_hash=hash_password("RootAdmin123!"),
+                    display_name="Root Administrator",
+                    role=UserRole.SUPER_ADMIN.value,
+                    is_active=True,
+                ),
+                User(
                     username="admin",
                     password_hash=hash_password("Admin123!"),
                     display_name="Administrator",

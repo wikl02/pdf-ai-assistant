@@ -29,7 +29,7 @@ async function submit() {
     if (requestedPath) {
       await router.replace(requestedPath)
     } else {
-      await router.replace(user?.role === 'admin' ? '/admin/dashboard' : '/app/chat')
+      await router.replace(user?.role === 'user' ? '/app/chat' : '/admin/dashboard')
     }
   } catch (error) {
     errorMessage.value = getErrorMessage(error, '登录失败，请检查用户名和密码')

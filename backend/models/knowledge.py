@@ -22,6 +22,19 @@ class DocumentStatus(StrEnum):
     FAILED = "failed"
 
 
+class IndexTaskStatus(StrEnum):
+    PENDING = "pending"
+    PROCESSING = "processing"
+    SUCCEEDED = "succeeded"
+    FAILED = "failed"
+
+
+class IndexTaskTrigger(StrEnum):
+    UPLOAD = "upload"
+    VERSION_UPLOAD = "version_upload"
+    REINDEX = "reindex"
+
+
 class KnowledgeBase(Base):
     __tablename__ = "knowledge_bases"
 
@@ -55,6 +68,7 @@ class Document(Base):
     )
     chunk_count: Mapped[int] = mapped_column(Integer, default=0)
     error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
+    current_version_number: Mapped[int] = mapped_column(Integer, default=1)
     uploaded_by_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
     updated_at: Mapped[datetime] = mapped_column(
@@ -65,6 +79,73 @@ class Document(Base):
     knowledge_base_links: Mapped[list["KnowledgeBaseDocument"]] = relationship(
         back_populates="document", cascade="all, delete-orphan"
     )
+    versions: Mapped[list["DocumentVersion"]] = relationship(
+        back_populates="document",
+        cascade="all, delete-orphan",
+        order_by="DocumentVersion.version_number.desc()",
+    )
+    index_tasks: Mapped[list["DocumentIndexTask"]] = relationship(
+        back_populates="document",
+        cascade="all, delete-orphan",
+        order_by="DocumentIndexTask.created_at.desc()",
+    )
+
+
+class DocumentVersion(Base):
+    __tablename__ = "document_versions"
+    __table_args__ = (
+        UniqueConstraint("document_id", "version_number", name="uq_document_version"),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    document_id: Mapped[int] = mapped_column(
+        ForeignKey("documents.id", ondelete="CASCADE"), index=True
+    )
+    version_number: Mapped[int] = mapped_column(Integer)
+    filename: Mapped[str] = mapped_column(String(255))
+    file_type: Mapped[str] = mapped_column(String(20))
+    file_size: Mapped[int] = mapped_column(Integer)
+    sha256: Mapped[str] = mapped_column(String(64), index=True)
+    storage_path: Mapped[str] = mapped_column(String(500), unique=True)
+    status: Mapped[str] = mapped_column(
+        String(20), default=DocumentStatus.PENDING.value, index=True
+    )
+    chunk_count: Mapped[int] = mapped_column(Integer, default=0)
+    error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_by_id: Mapped[int | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+
+    document: Mapped[Document] = relationship(back_populates="versions")
+
+
+class DocumentIndexTask(Base):
+    __tablename__ = "document_index_tasks"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    document_id: Mapped[int] = mapped_column(
+        ForeignKey("documents.id", ondelete="CASCADE"), index=True
+    )
+    knowledge_base_id: Mapped[int] = mapped_column(
+        ForeignKey("knowledge_bases.id", ondelete="CASCADE"), index=True
+    )
+    version_number: Mapped[int] = mapped_column(Integer)
+    trigger: Mapped[str] = mapped_column(String(30), index=True)
+    status: Mapped[str] = mapped_column(
+        String(20), default=IndexTaskStatus.PENDING.value, index=True
+    )
+    chunk_count: Mapped[int] = mapped_column(Integer, default=0)
+    error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
+    duration_ms: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    initiated_by_id: Mapped[int | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+
+    document: Mapped[Document] = relationship(back_populates="index_tasks")
 
 
 class KnowledgeBaseDocument(Base):
