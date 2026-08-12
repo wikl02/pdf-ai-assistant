@@ -14,6 +14,7 @@ from backend.routers import (
     auth,
     catalog,
     conversations,
+    evaluations,
     health,
     knowledge,
     management,
@@ -46,7 +47,7 @@ async def lifespan(_: FastAPI):
 def create_app() -> FastAPI:
     application = FastAPI(
         title="企业知识库智能助手 API",
-        version="0.7.0",
+        version="0.8.0",
         lifespan=lifespan,
         docs_url="/docs" if settings.api_docs_enabled else None,
         redoc_url="/redoc" if settings.api_docs_enabled else None,
@@ -73,6 +74,7 @@ def create_app() -> FastAPI:
     application.include_router(management.compatibility_router)
     application.include_router(catalog.router)
     application.include_router(conversations.router)
+    application.include_router(evaluations.router)
     application.include_router(knowledge.router)
     return application
 

@@ -58,6 +58,12 @@ const router = createRouter({
           component: () => import('../views/admin/AuditLogsView.vue'),
           meta: { requiresAuth: true, adminOnly: true, title: '审计日志' },
         },
+        {
+          path: 'evaluations',
+          name: 'admin-evaluations',
+          component: () => import('../views/admin/EvaluationsView.vue'),
+          meta: { requiresAuth: true, adminOnly: true, title: '质量评估' },
+        },
       ],
     },
     {

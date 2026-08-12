@@ -41,6 +41,14 @@ const eventOptions: Array<[string, string]> = [
   ['user_deleted', '删除用户'],
   ['user_restored', '恢复用户'],
   ['document_version_uploaded', '上传文档版本'],
+  ['evaluation_dataset_created', '创建评估问题集'],
+  ['evaluation_dataset_updated', '修改评估问题集'],
+  ['evaluation_dataset_deleted', '删除评估问题集'],
+  ['evaluation_case_created', '添加标准问题'],
+  ['evaluation_case_updated', '修改标准问题'],
+  ['evaluation_case_deleted', '删除标准问题'],
+  ['evaluation_run_completed', '运行质量评估'],
+  ['evaluation_result_reviewed', '人工验收结果'],
   ['conversation_deleted', '删除会话'],
 ]
 const eventLabels: Record<string, string> = Object.fromEntries(eventOptions)

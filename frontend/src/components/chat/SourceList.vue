@@ -22,7 +22,7 @@ function formatLocation(metadata: SourceMetadata): string {
 
 <template>
   <el-collapse class="source-collapse">
-    <el-collapse-item :title="`查看 ${sources.length} 条回答来源`" name="sources">
+    <el-collapse-item :title="`查看 ${sources.length} 条检索参考`" name="sources">
       <div class="source-list">
         <article v-for="(source, index) in sources" :key="`${source.metadata.chunk_id}-${index}`" class="source-item">
           <header>
@@ -32,7 +32,7 @@ function formatLocation(metadata: SourceMetadata): string {
             </span>
             <span class="source-score">
               <Gauge :size="15" />
-              相似度 {{ Math.round(source.score * 100) }}%
+              相关度 {{ Math.round(source.score * 100) }}%
             </span>
           </header>
           <p class="source-location">{{ formatLocation(source.metadata) }}</p>

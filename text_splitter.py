@@ -6,6 +6,30 @@ from config import CHUNK_OVERLAP, CHUNK_SIZE
 # 本模块把带来源位置的文本单元切成适合向量检索的重叠文本块。
 
 
+_BOUNDARIES = ("\n", "。", "！", "？", ". ", "! ", "? ", "；", "; ", "，", ", ")
+
+
+def _preferred_chunk_end(text, start, hard_end):
+    """在接近块上限的位置寻找自然断点，减少句子被从中间截断。"""
+
+    if hard_end >= len(text):
+        return len(text)
+
+    minimum_end = start + max(1, (hard_end - start) // 2)
+    candidate_end = -1
+    candidate_boundary_length = 0
+
+    for boundary in _BOUNDARIES:
+        position = text.rfind(boundary, minimum_end, hard_end)
+        if position > candidate_end:
+            candidate_end = position
+            candidate_boundary_length = len(boundary)
+
+    if candidate_end >= minimum_end:
+        return candidate_end + candidate_boundary_length
+    return hard_end
+
+
 def format_location(metadata):
     location_type = metadata.get("location_type")
 
@@ -47,7 +71,8 @@ def split_units_to_chunks(units, chunk_size=CHUNK_SIZE, overlap=CHUNK_OVERLAP):
 
         start = 0
         while start < len(text):
-            end = min(start + chunk_size, len(text))
+            hard_end = min(start + chunk_size, len(text))
+            end = _preferred_chunk_end(text, start, hard_end)
             raw_chunk_text = text[start:end]
             chunk_text = raw_chunk_text.strip()
 
@@ -86,7 +111,7 @@ def split_units_to_chunks(units, chunk_size=CHUNK_SIZE, overlap=CHUNK_OVERLAP):
                 break
 
             # 相邻文本块保留重叠内容，降低答案恰好被切在边界上的风险。
-            start = end - overlap
+            start = max(start + 1, end - overlap)
 
     return chunks
 

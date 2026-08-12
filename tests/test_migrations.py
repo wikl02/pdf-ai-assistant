@@ -26,11 +26,15 @@ def test_alembic_upgrade_creates_enterprise_tables(tmp_path):
             "audit_logs",
             "document_versions",
             "document_index_tasks",
+            "evaluation_datasets",
+            "evaluation_cases",
+            "evaluation_runs",
+            "evaluation_results",
             "alembic_version",
     }.issubset(inspect(engine).get_table_names())
     with engine.connect() as connection:
         revision = connection.execute(text("select version_num from alembic_version")).scalar_one()
-    assert revision == "20260804_0005"
+    assert revision == "20260804_0006"
 
 
 def test_access_migration_preserves_existing_user_catalog_access(tmp_path):

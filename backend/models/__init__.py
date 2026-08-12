@@ -7,6 +7,14 @@ from backend.models.access import (
     UserDepartment,
 )
 from backend.models.activity import AuditLog, ChatConversation, ChatMessage
+from backend.models.evaluation import (
+    EvaluationCase,
+    EvaluationDataset,
+    EvaluationResult,
+    EvaluationReviewStatus,
+    EvaluationRun,
+    EvaluationRunStatus,
+)
 from backend.models.knowledge import (
     Document,
     DocumentIndexTask,
@@ -28,6 +36,12 @@ __all__ = [
     "DocumentIndexTask",
     "DocumentStatus",
     "DocumentVersion",
+    "EvaluationCase",
+    "EvaluationDataset",
+    "EvaluationResult",
+    "EvaluationReviewStatus",
+    "EvaluationRun",
+    "EvaluationRunStatus",
     "IndexTaskStatus",
     "IndexTaskTrigger",
     "KnowledgeBase",

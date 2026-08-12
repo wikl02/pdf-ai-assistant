@@ -87,22 +87,27 @@ def extract_pdf_units(file_name, file_bytes):
 @lru_cache(maxsize=20)
 def extract_text_units(file_name, file_bytes, file_type):
     text = decode_text(file_bytes)
-    lines = [line.strip() for line in text.splitlines() if line.strip()]
+    units = []
 
-    if not lines:
-        return []
+    # TXT/Markdown 通常已经用换行表达条款、问答或段落。保留这些天然边界，
+    # 避免把退款、密码、价格等不同主题压进同一个向量。
+    for line_number, line in enumerate(text.splitlines(), start=1):
+        line_text = line.strip()
+        if not line_text:
+            continue
+        units.append(
+            {
+                "source_name": file_name,
+                "file_type": file_type,
+                "location_type": "line",
+                "page": 0,
+                "start_line": line_number,
+                "end_line": line_number,
+                "text": line_text,
+            }
+        )
 
-    return [
-        {
-            "source_name": file_name,
-            "file_type": file_type,
-            "location_type": "line",
-            "page": 0,
-            "start_line": 1,
-            "end_line": len(lines),
-            "text": "\n".join(lines),
-        }
-    ]
+    return units
 
 
 @lru_cache(maxsize=20)

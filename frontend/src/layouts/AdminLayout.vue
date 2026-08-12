@@ -3,6 +3,7 @@ import { computed, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import {
   BookOpen,
+  ClipboardCheck,
   ChevronDown,
   LayoutDashboard,
   LogOut,
@@ -68,6 +69,10 @@ function logout() {
         <el-menu-item index="/admin/audit-logs">
           <ScrollText :size="18" />
           <span>审计日志</span>
+        </el-menu-item>
+        <el-menu-item index="/admin/evaluations">
+          <ClipboardCheck :size="18" />
+          <span>质量评估</span>
         </el-menu-item>
         <el-menu-item index="/app/chat">
           <MessageSquareText :size="18" />

@@ -2,6 +2,8 @@ export type UserRole = 'super_admin' | 'admin' | 'user'
 export type DocumentStatus = 'pending' | 'processing' | 'ready' | 'failed'
 export type IndexTaskStatus = 'pending' | 'processing' | 'succeeded' | 'failed'
 export type IndexTaskTrigger = 'upload' | 'version_upload' | 'reindex'
+export type EvaluationRunStatus = 'running' | 'completed' | 'failed'
+export type ReviewStatus = 'unreviewed' | 'passed' | 'failed'
 
 export interface User {
   id: number
@@ -185,4 +187,87 @@ export interface UsageSummary {
   active_user_count: number
   conversation_count: number
   message_count: number
+}
+
+export interface EvaluationSummary {
+  dataset_count: number
+  case_count: number
+  completed_run_count: number
+  latest_answer_hit_rate: number | null
+  latest_source_hit_rate: number | null
+  latest_average_response_time_ms: number | null
+}
+
+export interface EvaluationDataset {
+  id: number
+  name: string
+  description: string | null
+  knowledge_base_id: number
+  knowledge_base_name: string
+  is_active: boolean
+  created_by_id: number | null
+  case_count: number
+  run_count: number
+  created_at: string
+  updated_at: string
+}
+
+export interface EvaluationCasePayload {
+  question: string
+  expected_answer_keywords: string[]
+  expected_source_names: string[]
+  notes?: string | null
+  is_active: boolean
+}
+
+export interface EvaluationCase extends EvaluationCasePayload {
+  id: number
+  dataset_id: number
+  notes: string | null
+  created_at: string
+  updated_at: string
+}
+
+export interface EvaluationResult {
+  id: number
+  run_id: number
+  case_id: number | null
+  question: string
+  expected_answer_keywords: string[]
+  expected_source_names: string[]
+  answer: string | null
+  sources: SourceChunk[]
+  answer_keyword_hits: string[]
+  source_hits: string[]
+  answer_hit: boolean
+  source_hit: boolean
+  response_time_ms: number | null
+  error_message: string | null
+  review_status: ReviewStatus
+  reviewer_id: number | null
+  review_note: string | null
+  reviewed_at: string | null
+  created_at: string
+}
+
+export interface EvaluationRun {
+  id: number
+  dataset_id: number
+  status: EvaluationRunStatus
+  total_cases: number
+  completed_cases: number
+  answer_hit_count: number
+  source_hit_count: number
+  average_response_time_ms: number | null
+  error_message: string | null
+  triggered_by_id: number | null
+  started_at: string
+  completed_at: string | null
+  created_at: string
+  results: EvaluationResult[]
+}
+
+export interface EvaluationDatasetDetail extends EvaluationDataset {
+  cases: EvaluationCase[]
+  recent_runs: Omit<EvaluationRun, 'results'>[]
 }
