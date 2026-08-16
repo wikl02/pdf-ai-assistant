@@ -27,10 +27,17 @@ def get_deepseek_api_key():
 
 
 def ask_ai(context_text, user_question):
+    model_name = "deepseek-chat"
     api_key = get_deepseek_api_key()
 
     if not api_key:
-        return "还没有配置 DEEPSEEK_API_KEY。你可以先完成知识库上传和检索，下一步再接入 AI。"
+        return {
+            "answer": "还没有配置 DEEPSEEK_API_KEY。你可以先完成知识库上传和检索，下一步再接入 AI。",
+            "llm_model": None,
+            "prompt_tokens": 0,
+            "completion_tokens": 0,
+            "total_tokens": 0,
+        }
 
     # DeepSeek 提供 OpenAI 兼容接口，因此可直接复用 OpenAI Python SDK。
     client = OpenAI(
@@ -54,32 +61,49 @@ def ask_ai(context_text, user_question):
 
     try:
         response = client.chat.completions.create(
-            model="deepseek-chat",
+            model=model_name,
             messages=[
                 {"role": "user", "content": prompt}
             ],
             temperature=0.2,
         )
 
-        return response.choices[0].message.content
+        usage = response.usage
+        return {
+            "answer": response.choices[0].message.content or "",
+            "llm_model": response.model or model_name,
+            "prompt_tokens": usage.prompt_tokens if usage else None,
+            "completion_tokens": usage.completion_tokens if usage else None,
+            "total_tokens": usage.total_tokens if usage else None,
+        }
 
     except Exception as e:
         # 对外返回可操作的友好提示，不把底层异常和敏感配置暴露给用户。
         error_text = str(e).lower()
 
         if "402" in error_text or "insufficient balance" in error_text or "balance" in error_text:
-            return "当前 DeepSeek 账户余额不足，请充值后重试，或更换可用的 API Key。"
+            answer = "当前 DeepSeek 账户余额不足，请充值后重试，或更换可用的 API Key。"
 
-        if "401" in error_text or "authentication" in error_text or "api key" in error_text:
-            return "DeepSeek API Key 无效或未授权，请检查 .env 文件中的 DEEPSEEK_API_KEY。"
+        elif "401" in error_text or "authentication" in error_text or "api key" in error_text:
+            answer = "DeepSeek API Key 无效或未授权，请检查 .env 文件中的 DEEPSEEK_API_KEY。"
 
-        if "429" in error_text or "rate limit" in error_text:
-            return "当前请求过于频繁，触发了 DeepSeek 限流，请稍后再试。"
+        elif "429" in error_text or "rate limit" in error_text:
+            answer = "当前请求过于频繁，触发了 DeepSeek 限流，请稍后再试。"
 
-        if "500" in error_text or "503" in error_text or "server" in error_text or "overloaded" in error_text:
-            return "DeepSeek 服务暂时繁忙，请稍后再试。"
+        elif "500" in error_text or "503" in error_text or "server" in error_text or "overloaded" in error_text:
+            answer = "DeepSeek 服务暂时繁忙，请稍后再试。"
 
-        if "timeout" in error_text or "connection" in error_text:
-            return "连接 DeepSeek 服务失败，请检查网络后重试。"
+        elif "timeout" in error_text or "connection" in error_text:
+            answer = "连接 DeepSeek 服务失败，请检查网络后重试。"
 
-        return "AI 服务暂时不可用，请稍后再试。"
+        else:
+            answer = "AI 服务暂时不可用，请稍后再试。"
+
+        # Provider errors usually do not include usage, so keep token fields null.
+        return {
+            "answer": answer,
+            "llm_model": model_name,
+            "prompt_tokens": None,
+            "completion_tokens": None,
+            "total_tokens": None,
+        }

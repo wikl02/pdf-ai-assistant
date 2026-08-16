@@ -33,6 +33,9 @@ const lifecycleOpen = ref(false)
 const lifecycleLoading = ref(false)
 const lifecycleUploading = ref(false)
 const lifecycle = ref<DocumentLifecycle | null>(null)
+const hasActiveIndexTask = computed(() => (
+  knowledgeBase.value?.documents.some((document) => document.status === 'processing') || false
+))
 
 function formatSize(size: number) {
   return size < 1024 * 1024
@@ -205,6 +208,7 @@ onMounted(loadDetail)
               text
               type="primary"
               :loading="processingDocumentId === scope.row.id"
+              :disabled="hasActiveIndexTask"
               @click="reindex(scope.row.id)"
             >
               <RotateCw :size="15" />

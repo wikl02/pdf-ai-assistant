@@ -121,6 +121,10 @@ class EvaluationResult(Base):
     answer_hit: Mapped[bool] = mapped_column(Boolean, default=False, index=True)
     source_hit: Mapped[bool] = mapped_column(Boolean, default=False, index=True)
     response_time_ms: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    llm_model: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    prompt_tokens: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    completion_tokens: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    total_tokens: Mapped[int | None] = mapped_column(Integer, nullable=True)
     error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
     review_status: Mapped[str] = mapped_column(
         String(20), default=EvaluationReviewStatus.UNREVIEWED.value, index=True

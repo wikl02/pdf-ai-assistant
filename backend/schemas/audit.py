@@ -31,3 +31,6 @@ class UsageSummaryResponse(BaseModel):
     active_user_count: int
     conversation_count: int
     message_count: int
+    prompt_tokens: int
+    completion_tokens: int
+    total_tokens: int

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from 'vue'
-import { Activity, AlertTriangle, MessageSquareText, RefreshCw, Users } from '@lucide/vue'
+import { Activity, AlertTriangle, Coins, MessageSquareText, RefreshCw, Users } from '@lucide/vue'
 
 import { getUsageSummaryApi, listAuditLogsApi } from '../../api/audit'
 import { getErrorMessage } from '../../api/http'
@@ -18,6 +18,9 @@ const summary = ref<UsageSummary>({
   active_user_count: 0,
   conversation_count: 0,
   message_count: 0,
+  prompt_tokens: 0,
+  completion_tokens: 0,
+  total_tokens: 0,
 })
 const filters = reactive({ event: '', outcome: '', page: 1, page_size: 30 })
 
@@ -26,6 +29,7 @@ const metrics = computed(() => [
   { label: '成功问答', value: summary.value.question_count, icon: MessageSquareText, tone: 'green' },
   { label: '失败事件', value: summary.value.failed_event_count, icon: AlertTriangle, tone: 'amber' },
   { label: '活跃用户', value: summary.value.active_user_count, icon: Users, tone: 'gray' },
+  { label: '累计 Token', value: summary.value.total_tokens, icon: Coins, tone: 'blue' },
 ])
 
 const eventOptions: Array<[string, string]> = [
@@ -90,6 +94,15 @@ function resetFilters() {
 
 function formatDetails(details: Record<string, unknown> | null) {
   if (!details || !Object.keys(details).length) return '-'
+  if ('total_tokens' in details) {
+    const model = details.llm_model ? `模型: ${String(details.llm_model)}` : '未调用模型'
+    return [
+      model,
+      `输入 Token: ${String(details.prompt_tokens ?? '-')}`,
+      `输出 Token: ${String(details.completion_tokens ?? '-')}`,
+      `总 Token: ${String(details.total_tokens ?? '-')}`,
+    ].join(' · ')
+  }
   return Object.entries(details)
     .slice(0, 4)
     .map(([key, value]) => `${key}: ${String(value)}`)

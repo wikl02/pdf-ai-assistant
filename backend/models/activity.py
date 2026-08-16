@@ -42,6 +42,10 @@ class ChatMessage(Base):
     sources: Mapped[list[dict[str, Any]] | None] = mapped_column(JSON, nullable=True)
     status: Mapped[str] = mapped_column(String(20), default="complete", index=True)
     response_time_ms: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    llm_model: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    prompt_tokens: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    completion_tokens: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    total_tokens: Mapped[int | None] = mapped_column(Integer, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=utc_now, index=True
     )

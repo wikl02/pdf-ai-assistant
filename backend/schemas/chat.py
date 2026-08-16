@@ -24,6 +24,10 @@ class ChatMessageResponse(BaseModel):
     sources: list[SourceChunk] | None
     status: str
     response_time_ms: int | None
+    llm_model: str | None
+    prompt_tokens: int | None
+    completion_tokens: int | None
+    total_tokens: int | None
     created_at: datetime
 
 

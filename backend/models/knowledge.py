@@ -27,6 +27,7 @@ class IndexTaskStatus(StrEnum):
     PROCESSING = "processing"
     SUCCEEDED = "succeeded"
     FAILED = "failed"
+    INTERRUPTED = "interrupted"
 
 
 class IndexTaskTrigger(StrEnum):

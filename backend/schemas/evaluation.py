@@ -64,6 +64,10 @@ class EvaluationResultResponse(BaseModel):
     answer_hit: bool
     source_hit: bool
     response_time_ms: int | None
+    llm_model: str | None
+    prompt_tokens: int | None
+    completion_tokens: int | None
+    total_tokens: int | None
     error_message: str | None
     review_status: EvaluationReviewStatus
     reviewer_id: int | None

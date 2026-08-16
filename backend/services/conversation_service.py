@@ -174,6 +174,10 @@ def add_assistant_message(
     sources: list[dict] | None,
     response_time_ms: int,
     status: str = "complete",
+    llm_model: str | None = None,
+    prompt_tokens: int | None = None,
+    completion_tokens: int | None = None,
+    total_tokens: int | None = None,
 ) -> ChatMessage:
     message = ChatMessage(
         conversation_id=conversation.id,
@@ -182,6 +186,10 @@ def add_assistant_message(
         sources=sources,
         status=status,
         response_time_ms=response_time_ms,
+        llm_model=llm_model,
+        prompt_tokens=prompt_tokens,
+        completion_tokens=completion_tokens,
+        total_tokens=total_tokens,
     )
     conversation.updated_at = utc_now()
     db.add(message)

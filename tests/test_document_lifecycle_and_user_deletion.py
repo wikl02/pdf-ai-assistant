@@ -1,5 +1,13 @@
 from pathlib import Path
 
+from backend.models.knowledge import (
+    Document,
+    DocumentIndexTask,
+    DocumentStatus,
+    IndexTaskStatus,
+    IndexTaskTrigger,
+)
+
 from backend.services import management_service
 from tests.conftest import login_headers
 
@@ -92,6 +100,76 @@ def test_failed_index_keeps_failure_reason_and_task(api, monkeypatch):
     assert "embedding service unavailable" in lifecycle["versions"][0]["error_message"]
     assert lifecycle["index_tasks"][0]["status"] == "failed"
     assert lifecycle["index_tasks"][0]["duration_ms"] is not None
+
+
+def test_startup_recovery_marks_unfinished_reindex_as_interrupted(api):
+    headers = login_headers(api.client, "admin", "Admin123!")
+    knowledge_base = _create_knowledge_base(api, headers, "Interrupted Lifecycle KB")
+    base_url = f"/api/admin/knowledge-bases/{knowledge_base['id']}/documents"
+    uploaded = api.client.post(
+        base_url,
+        headers=headers,
+        files={"files": ("policy.txt", b"existing searchable content", "text/plain")},
+    )
+    document = uploaded.json()["documents"][0]
+
+    with api.session_factory() as db:
+        stored_document = db.get(Document, document["id"])
+        stored_document.status = DocumentStatus.PROCESSING.value
+        db.add(
+            DocumentIndexTask(
+                document_id=document["id"],
+                knowledge_base_id=knowledge_base["id"],
+                version_number=1,
+                trigger=IndexTaskTrigger.REINDEX.value,
+                status=IndexTaskStatus.PROCESSING.value,
+                started_at=management_service.datetime.now(
+                    management_service.timezone.utc
+                ),
+            )
+        )
+        db.commit()
+        assert management_service.recover_interrupted_index_tasks(db) == 1
+
+    lifecycle = api.client.get(
+        f"{base_url}/{document['id']}/lifecycle", headers=headers
+    ).json()
+    assert lifecycle["document"]["status"] == "ready"
+    assert lifecycle["index_tasks"][0]["status"] == "interrupted"
+    assert "服务重启前任务未正常结束" in lifecycle["index_tasks"][0]["error_message"]
+
+
+def test_second_index_request_is_rejected_while_a_task_is_active(api):
+    headers = login_headers(api.client, "admin", "Admin123!")
+    first_kb = _create_knowledge_base(api, headers, "Busy KB One")
+    second_kb = _create_knowledge_base(api, headers, "Busy KB Two")
+    second_base_url = f"/api/admin/knowledge-bases/{second_kb['id']}/documents"
+    second_document = api.client.post(
+        second_base_url,
+        headers=headers,
+        files={"files": ("second.txt", b"second document", "text/plain")},
+    ).json()["documents"][0]
+
+    with api.session_factory() as db:
+        db.add(
+            DocumentIndexTask(
+                document_id=second_document["id"],
+                knowledge_base_id=first_kb["id"],
+                version_number=1,
+                trigger=IndexTaskTrigger.REINDEX.value,
+                status=IndexTaskStatus.PROCESSING.value,
+                started_at=management_service.datetime.now(
+                    management_service.timezone.utc
+                ),
+            )
+        )
+        db.commit()
+
+    response = api.client.post(
+        f"{second_base_url}/{second_document['id']}/reindex", headers=headers
+    )
+    assert response.status_code == 409
+    assert response.json()["detail"] == "当前已有文档正在建立索引，请等待该任务完成后再试。"
 
 
 def test_super_admin_and_admin_soft_delete_permissions(api):

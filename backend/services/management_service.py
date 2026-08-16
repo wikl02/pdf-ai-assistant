@@ -6,6 +6,7 @@
 import logging
 from datetime import datetime, timezone
 from pathlib import Path
+from threading import Lock
 from time import perf_counter
 from uuid import uuid4
 
@@ -33,6 +34,64 @@ from text_splitter import split_units_to_chunks
 
 
 logger = logging.getLogger("pdf_ai_assistant.management")
+_indexing_lock = Lock()
+
+
+def recover_interrupted_index_tasks(db: Session) -> int:
+    """Close index tasks that cannot still be running after an API restart."""
+    active_statuses = (
+        IndexTaskStatus.PENDING.value,
+        IndexTaskStatus.PROCESSING.value,
+    )
+    tasks = list(
+        db.scalars(
+            select(DocumentIndexTask).where(
+                DocumentIndexTask.status.in_(active_statuses)
+            )
+        )
+    )
+    if not tasks:
+        return 0
+
+    completed_at = datetime.now(timezone.utc)
+    message = "服务重启前任务未正常结束，系统已将其标记为中断，请重新执行索引。"
+    for task in tasks:
+        task.status = IndexTaskStatus.INTERRUPTED.value
+        task.error_message = message
+        task.completed_at = completed_at
+        if task.started_at:
+            started_at = task.started_at
+            if started_at.tzinfo is None:
+                started_at = started_at.replace(tzinfo=timezone.utc)
+            task.duration_ms = max(
+                0, round((completed_at - started_at).total_seconds() * 1000)
+            )
+
+        document = db.get(Document, task.document_id)
+        if document and document.status == DocumentStatus.PROCESSING.value:
+            # A reindex keeps the previous usable vectors until replacement succeeds.
+            if task.trigger == IndexTaskTrigger.REINDEX.value and document.chunk_count > 0:
+                document.status = DocumentStatus.READY.value
+            else:
+                document.status = DocumentStatus.FAILED.value
+            document.error_message = message
+
+        version = db.scalar(
+            select(DocumentVersion).where(
+                DocumentVersion.document_id == task.document_id,
+                DocumentVersion.version_number == task.version_number,
+            )
+        )
+        if version and version.status == DocumentStatus.PROCESSING.value:
+            if task.trigger == IndexTaskTrigger.REINDEX.value and version.chunk_count > 0:
+                version.status = DocumentStatus.READY.value
+            else:
+                version.status = DocumentStatus.FAILED.value
+            version.error_message = message
+
+    db.commit()
+    logger.warning("recovered interrupted index tasks count=%s", len(tasks))
+    return len(tasks)
 
 
 def _knowledge_base_or_404(db: Session, knowledge_base_id: int) -> KnowledgeBase:
@@ -158,6 +217,35 @@ def _process_document(
     trigger: IndexTaskTrigger,
     initiated_by_id: int | None,
 ) -> Document:
+    if not _indexing_lock.acquire(blocking=False):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="当前已有文档正在建立索引，请等待该任务完成后再试。",
+        )
+
+    # The database guard also covers tasks left by another API process.
+    # The in-process lock closes the small race between this query and task creation.
+    try:
+        active_task = db.scalar(
+            select(DocumentIndexTask).where(
+                DocumentIndexTask.status.in_(
+                    (
+                        IndexTaskStatus.PENDING.value,
+                        IndexTaskStatus.PROCESSING.value,
+                    )
+                )
+            )
+        )
+    except Exception:
+        _indexing_lock.release()
+        raise
+    if active_task:
+        _indexing_lock.release()
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="当前已有文档正在建立索引，请等待该任务完成后再试。",
+        )
+
     version = db.scalar(
         select(DocumentVersion).where(
             DocumentVersion.document_id == document.id,
@@ -173,17 +261,16 @@ def _process_document(
         initiated_by_id=initiated_by_id,
         started_at=datetime.now(timezone.utc),
     )
-    db.add(task)
-    # 先落库“处理中”状态，让失败后仍能在管理页面看到并执行重新索引。
-    document.status = DocumentStatus.PROCESSING.value
-    document.error_message = None
-    if version:
-        version.status = DocumentStatus.PROCESSING.value
-        version.error_message = None
-    db.commit()
     started_at = perf_counter()
-
     try:
+        db.add(task)
+        # 先落库“处理中”状态，让生命周期页面能准确展示当前动作。
+        document.status = DocumentStatus.PROCESSING.value
+        document.error_message = None
+        if version:
+            version.status = DocumentStatus.PROCESSING.value
+            version.error_message = None
+        db.commit()
         # 解析器保留页码、行号、段落或表格行等来源位置，供回答引用。
         file_bytes = Path(document.storage_path).read_bytes()
         file_info = build_file_info(document.filename, file_bytes)
@@ -213,28 +300,30 @@ def _process_document(
             status_code=400,
             detail=f"文档 {document.filename} 处理失败，请检查文件内容和格式",
         ) from exc
-
-    document.status = DocumentStatus.READY.value
-    document.chunk_count = len(chunks)
-    document.error_message = None
-    if version:
-        version.status = DocumentStatus.READY.value
-        version.chunk_count = len(chunks)
-        version.error_message = None
-    task.status = IndexTaskStatus.SUCCEEDED.value
-    task.chunk_count = len(chunks)
-    task.error_message = None
-    task.duration_ms = round((perf_counter() - started_at) * 1000)
-    task.completed_at = datetime.now(timezone.utc)
-    db.commit()
-    db.refresh(document)
-    logger.info(
-        "document indexed document_id=%s knowledge_base_id=%s chunk_count=%s",
-        document.id,
-        knowledge_base.id,
-        document.chunk_count,
-    )
-    return document
+    else:
+        document.status = DocumentStatus.READY.value
+        document.chunk_count = len(chunks)
+        document.error_message = None
+        if version:
+            version.status = DocumentStatus.READY.value
+            version.chunk_count = len(chunks)
+            version.error_message = None
+        task.status = IndexTaskStatus.SUCCEEDED.value
+        task.chunk_count = len(chunks)
+        task.error_message = None
+        task.duration_ms = round((perf_counter() - started_at) * 1000)
+        task.completed_at = datetime.now(timezone.utc)
+        db.commit()
+        db.refresh(document)
+        logger.info(
+            "document indexed document_id=%s knowledge_base_id=%s chunk_count=%s",
+            document.id,
+            knowledge_base.id,
+            document.chunk_count,
+        )
+        return document
+    finally:
+        _indexing_lock.release()
 
 
 def upload_document(

@@ -79,8 +79,13 @@ def answer_question(collection_id: str, question: str) -> dict:
         return {
             "answer": "没有在知识库中检索到与问题相关的内容，因此本次没有调用 AI。",
             "sources": [],
+            "llm_model": None,
+            "prompt_tokens": 0,
+            "completion_tokens": 0,
+            "total_tokens": 0,
         }
+    llm_result = ask_ai(build_context(relevant_chunks), normalized_question)
     return {
-        "answer": ask_ai(build_context(relevant_chunks), normalized_question),
+        **llm_result,
         "sources": relevant_chunks,
     }

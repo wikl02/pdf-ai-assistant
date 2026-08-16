@@ -6,6 +6,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from backend.models.activity import AuditLog, ChatConversation, ChatMessage
+from backend.models.evaluation import EvaluationResult
 
 
 def list_audit_logs(
@@ -45,6 +46,14 @@ def list_audit_logs(
 
 
 def usage_summary(db: Session) -> dict[str, int]:
+    chat_prompt_tokens = db.scalar(select(func.sum(ChatMessage.prompt_tokens))) or 0
+    chat_completion_tokens = db.scalar(select(func.sum(ChatMessage.completion_tokens))) or 0
+    chat_total_tokens = db.scalar(select(func.sum(ChatMessage.total_tokens))) or 0
+    evaluation_prompt_tokens = db.scalar(select(func.sum(EvaluationResult.prompt_tokens))) or 0
+    evaluation_completion_tokens = (
+        db.scalar(select(func.sum(EvaluationResult.completion_tokens))) or 0
+    )
+    evaluation_total_tokens = db.scalar(select(func.sum(EvaluationResult.total_tokens))) or 0
     return {
         "audit_event_count": db.scalar(select(func.count(AuditLog.id))) or 0,
         "question_count": db.scalar(
@@ -66,4 +75,7 @@ def usage_summary(db: Session) -> dict[str, int]:
         or 0,
         "conversation_count": db.scalar(select(func.count(ChatConversation.id))) or 0,
         "message_count": db.scalar(select(func.count(ChatMessage.id))) or 0,
+        "prompt_tokens": chat_prompt_tokens + evaluation_prompt_tokens,
+        "completion_tokens": chat_completion_tokens + evaluation_completion_tokens,
+        "total_tokens": chat_total_tokens + evaluation_total_tokens,
     }

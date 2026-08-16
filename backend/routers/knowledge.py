@@ -133,6 +133,10 @@ def ask_question(
         result.answer,
         sources=[source.model_dump(mode="json") for source in result.sources],
         response_time_ms=elapsed_ms,
+        llm_model=result.llm_model,
+        prompt_tokens=result.prompt_tokens,
+        completion_tokens=result.completion_tokens,
+        total_tokens=result.total_tokens,
     )
     audit_event(
         "question_answered",
@@ -145,6 +149,10 @@ def ask_question(
         question_length=len(request.question.strip()),
         source_count=len(result.sources),
         response_time_ms=elapsed_ms,
+        llm_model=result.llm_model,
+        prompt_tokens=result.prompt_tokens,
+        completion_tokens=result.completion_tokens,
+        total_tokens=result.total_tokens,
     )
     return result.model_copy(
         update={

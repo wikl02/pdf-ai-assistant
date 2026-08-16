@@ -38,6 +38,10 @@ def test_conversation_history_continues_and_is_owned(api, monkeypatch):
                     "score": 0.91,
                 }
             ],
+            "llm_model": "deepseek-chat",
+            "prompt_tokens": 120,
+            "completion_tokens": 30,
+            "total_tokens": 150,
         },
     )
 
@@ -85,6 +89,24 @@ def test_conversation_history_continues_and_is_owned(api, monkeypatch):
         "assistant",
     ]
     assert detail.json()["messages"][1]["sources"][0]["metadata"]["source_name"] == "guide.txt"
+    assert detail.json()["messages"][1]["llm_model"] == "deepseek-chat"
+    assert detail.json()["messages"][1]["prompt_tokens"] == 120
+    assert detail.json()["messages"][1]["completion_tokens"] == 30
+    assert detail.json()["messages"][1]["total_tokens"] == 150
+
+    summary = api.client.get(
+        "/api/admin/audit-logs/summary", headers=admin_headers
+    ).json()
+    assert summary["prompt_tokens"] == 240
+    assert summary["completion_tokens"] == 60
+    assert summary["total_tokens"] == 300
+
+    audit = api.client.get(
+        "/api/admin/audit-logs",
+        headers=admin_headers,
+        params={"event": "question_answered"},
+    ).json()
+    assert audit["items"][0]["details"]["total_tokens"] == 150
 
     assert api.client.get(
         f"/api/chat/conversations/{conversation_id}", headers=admin_headers

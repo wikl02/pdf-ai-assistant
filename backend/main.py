@@ -21,6 +21,7 @@ from backend.routers import (
     users,
 )
 from backend.services.user_service import ensure_bootstrap_admin
+from backend.services.management_service import recover_interrupted_index_tasks
 
 
 logging.basicConfig(
@@ -40,6 +41,7 @@ async def lifespan(_: FastAPI):
     init_database()
     with session_scope() as db:
         ensure_bootstrap_admin(db)
+        recover_interrupted_index_tasks(db)
     logger.info("application startup complete")
     yield
 

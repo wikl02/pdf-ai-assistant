@@ -268,10 +268,18 @@ def run_evaluation(db: Session, dataset_id: int, current_user: User) -> Evaluati
         answer: str | None = None
         sources: list[dict[str, Any]] = []
         error_message: str | None = None
+        llm_model: str | None = None
+        prompt_tokens: int | None = None
+        completion_tokens: int | None = None
+        total_tokens: int | None = None
         try:
             payload = answer_question(knowledge_base.collection_name, case.question)
             answer = str(payload.get("answer") or "")
             sources = _json_sources(payload.get("sources") or [])
+            llm_model = payload.get("llm_model")
+            prompt_tokens = payload.get("prompt_tokens")
+            completion_tokens = payload.get("completion_tokens")
+            total_tokens = payload.get("total_tokens")
         except HTTPException as exc:
             error_message = exc.detail if isinstance(exc.detail, str) else "问答服务返回错误"
             failed_count += 1
@@ -300,6 +308,10 @@ def run_evaluation(db: Session, dataset_id: int, current_user: User) -> Evaluati
             answer_hit=bool(answer) and len(keyword_hits) == len(case.expected_answer_keywords),
             source_hit=len(source_hits) > 0,
             response_time_ms=elapsed_ms,
+            llm_model=llm_model,
+            prompt_tokens=prompt_tokens,
+            completion_tokens=completion_tokens,
+            total_tokens=total_tokens,
             error_message=error_message,
         )
         db.add(result)

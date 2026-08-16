@@ -21,6 +21,10 @@ class AskResponse(BaseModel):
     conversation_id: int | None = None
     user_message_id: int | None = None
     assistant_message_id: int | None = None
+    llm_model: str | None = None
+    prompt_tokens: int | None = None
+    completion_tokens: int | None = None
+    total_tokens: int | None = None
 
 
 class UploadedDocument(BaseModel):

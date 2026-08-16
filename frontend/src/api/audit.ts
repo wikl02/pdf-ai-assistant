@@ -18,5 +18,10 @@ export async function listAuditLogsApi(filters: AuditLogFilters): Promise<AuditL
 
 export async function getUsageSummaryApi(): Promise<UsageSummary> {
   const { data } = await http.get<UsageSummary>('/api/admin/audit-logs/summary')
-  return data
+  return {
+    ...data,
+    prompt_tokens: data.prompt_tokens ?? 0,
+    completion_tokens: data.completion_tokens ?? 0,
+    total_tokens: data.total_tokens ?? 0,
+  }
 }

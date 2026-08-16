@@ -94,6 +94,10 @@ async function openConversation(id: number) {
       sources: message.sources || [],
       status: message.status === 'failed' ? 'error' : 'done',
       response_time_ms: message.response_time_ms,
+      llm_model: message.llm_model,
+      prompt_tokens: message.prompt_tokens,
+      completion_tokens: message.completion_tokens,
+      total_tokens: message.total_tokens,
       created_at: message.created_at,
     }))
     await scrollToBottom(false)
@@ -152,6 +156,10 @@ async function ask() {
     assistantMessage.id = response.assistant_message_id || assistantMessage.id
     assistantMessage.content = response.answer
     assistantMessage.sources = response.sources
+    assistantMessage.llm_model = response.llm_model
+    assistantMessage.prompt_tokens = response.prompt_tokens
+    assistantMessage.completion_tokens = response.completion_tokens
+    assistantMessage.total_tokens = response.total_tokens
     assistantMessage.status = 'done'
     await loadConversations()
   } catch (error) {

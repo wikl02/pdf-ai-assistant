@@ -1,6 +1,6 @@
 export type UserRole = 'super_admin' | 'admin' | 'user'
 export type DocumentStatus = 'pending' | 'processing' | 'ready' | 'failed'
-export type IndexTaskStatus = 'pending' | 'processing' | 'succeeded' | 'failed'
+export type IndexTaskStatus = 'pending' | 'processing' | 'succeeded' | 'failed' | 'interrupted'
 export type IndexTaskTrigger = 'upload' | 'version_upload' | 'reindex'
 export type EvaluationRunStatus = 'running' | 'completed' | 'failed'
 export type ReviewStatus = 'unreviewed' | 'passed' | 'failed'
@@ -126,6 +126,10 @@ export interface AskResponse {
   conversation_id: number | null
   user_message_id: number | null
   assistant_message_id: number | null
+  llm_model: string | null
+  prompt_tokens: number | null
+  completion_tokens: number | null
+  total_tokens: number | null
 }
 
 export interface ChatMessage {
@@ -135,6 +139,10 @@ export interface ChatMessage {
   sources?: SourceChunk[]
   status?: 'loading' | 'error' | 'done'
   response_time_ms?: number | null
+  llm_model?: string | null
+  prompt_tokens?: number | null
+  completion_tokens?: number | null
+  total_tokens?: number | null
   created_at?: string
 }
 
@@ -158,6 +166,10 @@ export interface ConversationDetail extends ConversationSummary {
     sources: SourceChunk[] | null
     status: 'complete' | 'failed'
     response_time_ms: number | null
+    llm_model: string | null
+    prompt_tokens: number | null
+    completion_tokens: number | null
+    total_tokens: number | null
     created_at: string
   }>
 }
@@ -187,6 +199,9 @@ export interface UsageSummary {
   active_user_count: number
   conversation_count: number
   message_count: number
+  prompt_tokens: number
+  completion_tokens: number
+  total_tokens: number
 }
 
 export interface EvaluationSummary {
@@ -242,6 +257,10 @@ export interface EvaluationResult {
   answer_hit: boolean
   source_hit: boolean
   response_time_ms: number | null
+  llm_model: string | null
+  prompt_tokens: number | null
+  completion_tokens: number | null
+  total_tokens: number | null
   error_message: string | null
   review_status: ReviewStatus
   reviewer_id: number | null

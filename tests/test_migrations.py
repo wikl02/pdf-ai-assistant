@@ -34,7 +34,14 @@ def test_alembic_upgrade_creates_enterprise_tables(tmp_path):
     }.issubset(inspect(engine).get_table_names())
     with engine.connect() as connection:
         revision = connection.execute(text("select version_num from alembic_version")).scalar_one()
-    assert revision == "20260804_0006"
+    assert revision == "20260813_0007"
+    chat_columns = {column["name"] for column in inspect(engine).get_columns("chat_messages")}
+    evaluation_columns = {
+        column["name"] for column in inspect(engine).get_columns("evaluation_results")
+    }
+    token_columns = {"llm_model", "prompt_tokens", "completion_tokens", "total_tokens"}
+    assert token_columns.issubset(chat_columns)
+    assert token_columns.issubset(evaluation_columns)
 
 
 def test_access_migration_preserves_existing_user_catalog_access(tmp_path):

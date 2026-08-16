@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { Clock3, FileClock, FileUp, RefreshCw } from '@lucide/vue'
 import type { UploadFile, UploadUserFile } from 'element-plus'
 
@@ -21,6 +21,10 @@ const emit = defineEmits<{
 const fileList = ref<UploadUserFile[]>([])
 const selectedFile = ref<File | null>(null)
 const currentError = computed(() => props.lifecycle?.document.error_message || '')
+const activeTask = computed(() => props.lifecycle?.index_tasks.find(
+  (task) => task.status === 'pending' || task.status === 'processing',
+) || null)
+let refreshTimer: ReturnType<typeof setInterval> | null = null
 
 const triggerLabels: Record<IndexTaskTrigger, string> = {
   upload: '首次上传',
@@ -32,6 +36,33 @@ const taskLabels: Record<IndexTaskStatus, string> = {
   processing: '处理中',
   succeeded: '成功',
   failed: '失败',
+  interrupted: '已中断',
+}
+
+function taskStatusLabel(trigger: IndexTaskTrigger, status: IndexTaskStatus) {
+  const action = triggerLabels[trigger]
+  if (status === 'pending') return `等待${action}`
+  if (status === 'processing') return `正在${action}`
+  if (status === 'interrupted') return `${action}已中断`
+  return taskLabels[status]
+}
+
+function taskTagType(status: IndexTaskStatus) {
+  if (status === 'succeeded') return 'success'
+  if (status === 'failed' || status === 'interrupted') return 'danger'
+  return 'warning'
+}
+
+function stopAutoRefresh() {
+  if (refreshTimer) clearInterval(refreshTimer)
+  refreshTimer = null
+}
+
+function startAutoRefresh() {
+  stopAutoRefresh()
+  refreshTimer = setInterval(() => {
+    if (!props.loading && activeTask.value) emit('refresh')
+  }, 3000)
 }
 
 function handleFileChange(file: UploadFile) {
@@ -48,11 +79,16 @@ function formatTime(value: string | null) {
 }
 
 watch(() => props.modelValue, (open) => {
-  if (!open) {
+  if (open) {
+    startAutoRefresh()
+  } else {
+    stopAutoRefresh()
     selectedFile.value = null
     fileList.value = []
   }
 })
+
+onBeforeUnmount(stopAutoRefresh)
 </script>
 
 <template>
@@ -75,8 +111,11 @@ watch(() => props.modelValue, (open) => {
             <strong>V{{ lifecycle.document.current_version_number }}</strong>
           </div>
           <div>
-            <span>处理状态</span>
-            <DocumentStatusTag :status="lifecycle.document.status" />
+            <span>当前状态</span>
+            <el-tag v-if="activeTask" type="warning" size="small">
+              {{ taskStatusLabel(activeTask.trigger, activeTask.status) }}
+            </el-tag>
+            <DocumentStatusTag v-else :status="lifecycle.document.status" />
           </div>
           <el-button :loading="loading" @click="emit('refresh')">
             <RefreshCw :size="15" />刷新
@@ -84,8 +123,16 @@ watch(() => props.modelValue, (open) => {
         </div>
 
         <el-alert
+          v-if="activeTask"
+          :title="`${taskStatusLabel(activeTask.trigger, activeTask.status)}，页面将自动刷新任务状态。`"
+          type="warning"
+          show-icon
+          :closable="false"
+        />
+
+        <el-alert
           v-if="currentError"
-          :title="`最近一次处理失败：${currentError}`"
+          :title="`最近一次处理异常：${currentError}`"
           type="error"
           show-icon
           :closable="false"
@@ -137,8 +184,8 @@ watch(() => props.modelValue, (open) => {
             </el-table-column>
             <el-table-column label="状态" width="90">
               <template #default="scope">
-                <el-tag :type="scope.row.status === 'succeeded' ? 'success' : scope.row.status === 'failed' ? 'danger' : 'warning'" size="small">
-                  {{ taskLabels[scope.row.status as IndexTaskStatus] }}
+                <el-tag :type="taskTagType(scope.row.status as IndexTaskStatus)" size="small">
+                  {{ taskStatusLabel(scope.row.trigger as IndexTaskTrigger, scope.row.status as IndexTaskStatus) }}
                 </el-tag>
               </template>
             </el-table-column>
@@ -149,7 +196,7 @@ watch(() => props.modelValue, (open) => {
             <el-table-column label="执行时间" width="170">
               <template #default="scope">{{ formatTime(scope.row.created_at) }}</template>
             </el-table-column>
-            <el-table-column label="失败原因" min-width="170" show-overflow-tooltip>
+            <el-table-column label="异常原因" min-width="170" show-overflow-tooltip>
               <template #default="scope">{{ scope.row.error_message || '-' }}</template>
             </el-table-column>
           </el-table>

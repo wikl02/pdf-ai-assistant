@@ -255,6 +255,9 @@ async function mockApi(page: Page, role: 'super_admin' | 'admin' | 'user') {
         active_user_count: 18,
         conversation_count: 79,
         message_count: 314,
+        prompt_tokens: 128000,
+        completion_tokens: 24000,
+        total_tokens: 152000,
       })
     }
     if (pathname === '/api/admin/audit-logs') {

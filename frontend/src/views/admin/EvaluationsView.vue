@@ -432,6 +432,7 @@ onMounted(() => loadOverview())
             <el-table-column label="回答" width="90"><template #default="scope"><el-tag :type="scope.row.answer_hit ? 'success' : 'danger'" size="small">{{ scope.row.answer_hit ? '命中' : '未命中' }}</el-tag></template></el-table-column>
             <el-table-column label="来源" width="90"><template #default="scope"><el-tag :type="scope.row.source_hit ? 'success' : 'danger'" size="small">{{ scope.row.source_hit ? '命中' : '未命中' }}</el-tag></template></el-table-column>
             <el-table-column label="耗时" width="90"><template #default="scope">{{ scope.row.response_time_ms }} ms</template></el-table-column>
+            <el-table-column label="Token" width="90"><template #default="scope">{{ scope.row.total_tokens ?? '-' }}</template></el-table-column>
             <el-table-column label="人工验收" width="100"><template #default="scope"><el-tag :type="scope.row.review_status === 'passed' ? 'success' : scope.row.review_status === 'failed' ? 'danger' : 'info'" size="small">{{ scope.row.review_status === 'passed' ? '通过' : scope.row.review_status === 'failed' ? '不通过' : '未验收' }}</el-tag></template></el-table-column>
             <el-table-column label="操作" width="80"><template #default="scope"><el-button link type="primary" @click="openReview(scope.row)">验收</el-button></template></el-table-column>
           </el-table>

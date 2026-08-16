@@ -56,6 +56,10 @@ def test_evaluation_dataset_run_and_manual_review(api, monkeypatch):
                     "score": 0.93,
                 }
             ],
+            "llm_model": "deepseek-chat",
+            "prompt_tokens": 90,
+            "completion_tokens": 20,
+            "total_tokens": 110,
         }
 
     monkeypatch.setattr(evaluation_service, "answer_question", fake_answer)
@@ -71,6 +75,13 @@ def test_evaluation_dataset_run_and_manual_review(api, monkeypatch):
     assert payload["source_hit_count"] == 1
     assert payload["results"][0]["answer_keyword_hits"] == ["7天", "退款"]
     assert payload["results"][0]["source_hits"] == ["产品FAQ.txt"]
+    assert payload["results"][0]["llm_model"] == "deepseek-chat"
+    assert payload["results"][0]["total_tokens"] == 110
+
+    usage = api.client.get("/api/admin/audit-logs/summary", headers=headers).json()
+    assert usage["prompt_tokens"] == 90
+    assert usage["completion_tokens"] == 20
+    assert usage["total_tokens"] == 110
 
     result_id = payload["results"][0]["id"]
     reviewed = api.client.patch(
