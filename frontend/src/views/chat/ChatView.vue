@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, nextTick, onMounted, ref } from 'vue'
+import { computed, nextTick, onMounted, ref, shallowRef } from 'vue'
 import {
   Eraser,
   History,
@@ -7,17 +7,19 @@ import {
   RefreshCw,
   Send,
   Sparkles,
+  Square,
   Trash2,
 } from '@lucide/vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 
 import {
   askQuestionApi,
+  cancelQuestionApi,
   deleteConversationApi,
   getConversationApi,
   listConversationsApi,
 } from '../../api/chat'
-import { getErrorMessage } from '../../api/http'
+import { getErrorMessage, isRequestCancelled } from '../../api/http'
 import { listAccessibleKnowledgeBasesApi } from '../../api/knowledge'
 import SourceList from '../../components/chat/SourceList.vue'
 import EmptyState from '../../components/common/EmptyState.vue'
@@ -33,8 +35,18 @@ const loadingKnowledgeBases = ref(true)
 const loadingConversations = ref(false)
 const loadingMessages = ref(false)
 const asking = ref(false)
+const stopping = ref(false)
 const errorMessage = ref('')
 const messageListRef = ref<HTMLElement>()
+
+interface ActiveQuestionRequest {
+  id: string
+  controller: AbortController
+  message: ChatMessage
+  cancelled: boolean
+}
+
+const activeQuestionRequest = shallowRef<ActiveQuestionRequest | null>(null)
 
 const selectedKnowledgeBase = computed(() =>
   knowledgeBases.value.find((item) => item.id === selectedKnowledgeBaseId.value),
@@ -72,7 +84,7 @@ async function loadConversations() {
 }
 
 async function selectKnowledgeBase(id: number) {
-  if (selectedKnowledgeBaseId.value === id) return
+  if (selectedKnowledgeBaseId.value === id || asking.value) return
   selectedKnowledgeBaseId.value = id
   localStorage.setItem('enterprise_kb_selected_id', String(id))
   newConversation(false)
@@ -80,7 +92,7 @@ async function selectKnowledgeBase(id: number) {
 }
 
 async function openConversation(id: number) {
-  if (currentConversationId.value === id || loadingMessages.value) return
+  if (currentConversationId.value === id || loadingMessages.value || asking.value) return
   loadingMessages.value = true
   errorMessage.value = ''
   try {
@@ -92,7 +104,9 @@ async function openConversation(id: number) {
       role: message.role,
       content: message.content,
       sources: message.sources || [],
-      status: message.status === 'failed' ? 'error' : 'done',
+      status: message.status === 'failed'
+        ? 'error'
+        : message.status === 'cancelled' ? 'cancelled' : 'done',
       response_time_ms: message.response_time_ms,
       llm_model: message.llm_model,
       prompt_tokens: message.prompt_tokens,
@@ -143,6 +157,13 @@ async function ask() {
     status: 'loading',
   }
   messages.value.push(assistantMessage)
+  const activeRequest: ActiveQuestionRequest = {
+    id: globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random().toString(16).slice(2)}`,
+    controller: new AbortController(),
+    message: assistantMessage,
+    cancelled: false,
+  }
+  activeQuestionRequest.value = activeRequest
   asking.value = true
   await scrollToBottom()
 
@@ -151,7 +172,10 @@ async function ask() {
       selectedKnowledgeBase.value.collection_name,
       content,
       currentConversationId.value,
+      activeRequest.id,
+      activeRequest.controller.signal,
     )
+    if (activeRequest.cancelled) return
     currentConversationId.value = response.conversation_id
     assistantMessage.id = response.assistant_message_id || assistantMessage.id
     assistantMessage.content = response.answer
@@ -163,16 +187,55 @@ async function ask() {
     assistantMessage.status = 'done'
     await loadConversations()
   } catch (error) {
-    assistantMessage.content = getErrorMessage(error, '回答生成失败，请稍后重试')
-    assistantMessage.status = 'error'
-    await loadConversations()
+    if (!activeRequest.cancelled && !isRequestCancelled(error)) {
+      assistantMessage.content = getErrorMessage(error, '回答生成失败，请稍后重试')
+      assistantMessage.status = 'error'
+      await loadConversations()
+    }
   } finally {
-    asking.value = false
+    if (activeQuestionRequest.value === activeRequest) {
+      activeQuestionRequest.value = null
+      asking.value = false
+      stopping.value = false
+    }
+    await scrollToBottom()
+  }
+}
+
+async function stopAnswer() {
+  const activeRequest = activeQuestionRequest.value
+  if (!activeRequest || stopping.value) return
+
+  activeRequest.cancelled = true
+  activeRequest.message.content = '回答已停止。'
+  activeRequest.message.status = 'cancelled'
+  stopping.value = true
+  try {
+    const response = await cancelQuestionApi(activeRequest.id)
+    if (response.conversation_id) currentConversationId.value = response.conversation_id
+    if (response.assistant_message_id) {
+      activeRequest.message.id = response.assistant_message_id
+    }
+    if (!response.cancelled) {
+      ElMessage.info('该回答已经结束，无需再次停止')
+    }
+  } catch (error) {
+    ElMessage.warning(getErrorMessage(error, '页面已停止等待，但后端取消状态暂时无法确认'))
+  } finally {
+    activeRequest.controller.abort()
+    if (activeQuestionRequest.value === activeRequest) {
+      activeQuestionRequest.value = null
+      asking.value = false
+      stopping.value = false
+    }
+    await new Promise((resolve) => window.setTimeout(resolve, 200))
+    await loadConversations()
     await scrollToBottom()
   }
 }
 
 function newConversation(showMessage = true) {
+  if (asking.value) return
   currentConversationId.value = null
   messages.value = []
   question.value = ''
@@ -217,6 +280,7 @@ onMounted(loadKnowledgeBases)
           id="knowledge-base-select"
           :model-value="selectedKnowledgeBaseId"
           :loading="loadingKnowledgeBases"
+          :disabled="asking"
           placeholder="选择知识库"
           @change="selectKnowledgeBase"
         >
@@ -234,12 +298,12 @@ onMounted(loadKnowledgeBases)
           <History :size="16" />
           <strong>历史会话</strong>
         </div>
-        <el-button circle text title="刷新历史" :loading="loadingConversations" @click="loadConversations">
+        <el-button circle text title="刷新历史" :loading="loadingConversations" :disabled="asking" @click="loadConversations">
           <RefreshCw :size="16" />
         </el-button>
       </div>
 
-      <el-button class="new-conversation-button" type="primary" plain @click="newConversation()">
+      <el-button class="new-conversation-button" type="primary" plain :disabled="asking" @click="newConversation()">
         <MessageSquarePlus :size="16" />
         新建会话
       </el-button>
@@ -262,6 +326,7 @@ onMounted(loadKnowledgeBases)
             class="history-delete"
             type="button"
             title="删除会话"
+            :disabled="asking"
             @click.stop="removeConversation(item.id)"
           >
             <Trash2 :size="14" />
@@ -282,11 +347,11 @@ onMounted(loadKnowledgeBases)
           <strong>{{ selectedKnowledgeBase?.name || '尚未选择' }}</strong>
         </div>
         <div class="conversation-actions">
-          <el-button @click="newConversation()">
+          <el-button :disabled="asking" @click="newConversation()">
             <MessageSquarePlus :size="16" />
             新建会话
           </el-button>
-          <el-button :disabled="!messages.length" @click="clearConversation">
+          <el-button :disabled="!messages.length || asking" @click="clearConversation">
             <Eraser :size="16" />
             删除当前会话
           </el-button>
@@ -310,7 +375,13 @@ onMounted(loadKnowledgeBases)
               <span /><span /><span />
               正在检索知识库
             </div>
-            <p v-else :class="{ 'error-answer': message.status === 'error' }">{{ message.content }}</p>
+            <p
+              v-else
+              :class="{
+                'error-answer': message.status === 'error',
+                'cancelled-answer': message.status === 'cancelled',
+              }"
+            >{{ message.content }}</p>
             <SourceList v-if="message.sources?.length" :sources="message.sources" />
           </div>
         </article>
@@ -328,10 +399,23 @@ onMounted(loadKnowledgeBases)
           @keydown.ctrl.enter.prevent="ask"
         />
         <el-button
+          v-if="asking"
+          class="send-button stop-button"
+          type="danger"
+          plain
+          native-type="button"
+          title="停止回答"
+          :loading="stopping"
+          @click="stopAnswer"
+        >
+          <Square :size="16" fill="currentColor" />
+          停止
+        </el-button>
+        <el-button
+          v-else
           class="send-button"
           type="primary"
           title="发送问题"
-          :loading="asking"
           :disabled="!question.trim() || !selectedKnowledgeBase"
           @click="ask"
         >

@@ -35,6 +35,7 @@ const metrics = computed(() => [
 const eventOptions: Array<[string, string]> = [
   ['login', '用户登录'],
   ['question_answered', '知识问答'],
+  ['question_cancel_requested', '停止回答'],
   ['documents_uploaded', '上传文档'],
   ['document_deleted', '删除文档'],
   ['document_reindexed', '重建索引'],
@@ -109,6 +110,16 @@ function formatDetails(details: Record<string, unknown> | null) {
     .join(' · ')
 }
 
+function outcomeLabel(outcome: AuditLog['outcome']) {
+  return { success: '成功', failed: '失败', cancelled: '已停止', ignored: '未执行' }[outcome]
+}
+
+function outcomeType(outcome: AuditLog['outcome']) {
+  if (outcome === 'success') return 'success'
+  if (outcome === 'failed') return 'danger'
+  return 'info'
+}
+
 onMounted(loadData)
 </script>
 
@@ -143,6 +154,8 @@ onMounted(loadData)
         <el-select v-model="filters.outcome" clearable placeholder="全部结果" @change="applyFilters">
           <el-option label="成功" value="success" />
           <el-option label="失败" value="failed" />
+          <el-option label="已停止" value="cancelled" />
+          <el-option label="未执行" value="ignored" />
         </el-select>
         <el-button @click="resetFilters">重置</el-button>
         <span class="audit-result-count">共 {{ total }} 条记录</span>
@@ -157,8 +170,8 @@ onMounted(loadData)
         </el-table-column>
         <el-table-column label="结果" width="90">
           <template #default="scope">
-            <el-tag :type="scope.row.outcome === 'success' ? 'success' : 'danger'" size="small">
-              {{ scope.row.outcome === 'success' ? '成功' : '失败' }}
+            <el-tag :type="outcomeType(scope.row.outcome)" size="small">
+              {{ outcomeLabel(scope.row.outcome) }}
             </el-tag>
           </template>
         </el-table-column>

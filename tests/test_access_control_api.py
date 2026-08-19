@@ -48,11 +48,10 @@ def test_direct_grant_controls_catalog_and_question_access(api, monkeypatch):
     catalog = api.client.get("/api/knowledge-bases", headers=member_headers)
     assert [item["id"] for item in catalog.json()] == [knowledge_base["id"]]
 
-    monkeypatch.setattr(
-        knowledge_router,
-        "answer_question",
-        lambda collection_id, question: {"answer": "Authorized", "sources": []},
-    )
+    async def authorized_answer(collection_id, question):
+        return {"answer": "Authorized", "sources": []}
+
+    monkeypatch.setattr(knowledge_router, "answer_question_async", authorized_answer)
     answered = api.client.post(
         "/api/chat/ask",
         headers=member_headers,

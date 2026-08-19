@@ -132,12 +132,19 @@ export interface AskResponse {
   total_tokens: number | null
 }
 
+export interface CancelQuestionResponse {
+  cancelled: boolean
+  conversation_id: number | null
+  user_message_id: number | null
+  assistant_message_id: number | null
+}
+
 export interface ChatMessage {
   id: string | number
   role: 'user' | 'assistant'
   content: string
   sources?: SourceChunk[]
-  status?: 'loading' | 'error' | 'done'
+  status?: 'loading' | 'error' | 'cancelled' | 'done'
   response_time_ms?: number | null
   llm_model?: string | null
   prompt_tokens?: number | null
@@ -164,7 +171,7 @@ export interface ConversationDetail extends ConversationSummary {
     role: 'user' | 'assistant'
     content: string
     sources: SourceChunk[] | null
-    status: 'complete' | 'failed'
+    status: 'complete' | 'failed' | 'cancelled'
     response_time_ms: number | null
     llm_model: string | null
     prompt_tokens: number | null
@@ -177,7 +184,7 @@ export interface ConversationDetail extends ConversationSummary {
 export interface AuditLog {
   id: number
   event: string
-  outcome: 'success' | 'failed'
+  outcome: 'success' | 'failed' | 'cancelled' | 'ignored'
   actor_id: number | null
   actor_name: string | null
   client_ip: string | null

@@ -1517,6 +1517,10 @@ code {
   color: #b42318;
 }
 
+.message-body .cancelled-answer {
+  color: #667085;
+}
+
 .answer-loading {
   display: flex;
   align-items: center;
@@ -1634,6 +1638,10 @@ code {
 .send-button {
   min-width: 88px;
   height: 40px;
+}
+
+.stop-button svg {
+  flex: 0 0 auto;
 }
 
 /* Shared states */

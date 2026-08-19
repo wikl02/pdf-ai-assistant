@@ -45,4 +45,8 @@ export function getErrorMessage(error: unknown, fallback = '请求失败，请�
   return fallback
 }
 
+export function isRequestCancelled(error: unknown): boolean {
+  return axios.isCancel(error) || (axios.isAxiosError(error) && error.code === 'ERR_CANCELED')
+}
+
 export default http

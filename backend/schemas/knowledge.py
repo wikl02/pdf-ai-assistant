@@ -7,6 +7,7 @@ class AskRequest(BaseModel):
     collection_id: str = Field(min_length=1, max_length=255)
     question: str = Field(min_length=1, max_length=5000)
     conversation_id: int | None = None
+    request_id: str | None = Field(default=None, min_length=8, max_length=64)
 
 
 class SourceChunk(BaseModel):
@@ -25,6 +26,13 @@ class AskResponse(BaseModel):
     prompt_tokens: int | None = None
     completion_tokens: int | None = None
     total_tokens: int | None = None
+
+
+class CancelQuestionResponse(BaseModel):
+    cancelled: bool
+    conversation_id: int | None = None
+    user_message_id: int | None = None
+    assistant_message_id: int | None = None
 
 
 class UploadedDocument(BaseModel):

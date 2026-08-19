@@ -94,7 +94,12 @@ function json(route: Route, body: unknown, status = 200) {
   })
 }
 
-async function mockApi(page: Page, role: 'super_admin' | 'admin' | 'user') {
+async function mockApi(
+  page: Page,
+  role: 'super_admin' | 'admin' | 'user',
+  options: { slowAsk?: boolean } = {},
+) {
+  let releaseSlowAsk: (() => void) | null = null
   page.on('pageerror', (error) => console.error(`Browser page error: ${error.message}`))
   page.on('console', (message) => {
     if (message.type() === 'error') console.error(`Browser console error: ${message.text()}`)
@@ -239,12 +244,24 @@ async function mockApi(page: Page, role: 'super_admin' | 'admin' | 'user') {
     }
     if (pathname === '/api/chat/ask' && request.method() === 'POST') {
       const payload = request.postDataJSON() as { question: string }
+      if (options.slowAsk) {
+        await new Promise<void>((resolve) => { releaseSlowAsk = resolve })
+      }
       return json(route, {
         answer: `已根据知识库回答：${payload.question}`,
         sources: [],
         conversation_id: 41,
         user_message_id: Date.now(),
         assistant_message_id: Date.now() + 1,
+      })
+    }
+    if (pathname.startsWith('/api/chat/requests/') && pathname.endsWith('/cancel')) {
+      releaseSlowAsk?.()
+      return json(route, {
+        cancelled: true,
+        conversation_id: 41,
+        user_message_id: 501,
+        assistant_message_id: 502,
       })
     }
     if (pathname === '/api/admin/audit-logs/summary') {
@@ -446,6 +463,35 @@ test('连续多轮问答后输入框仍保持在可见区域', async ({ page }) 
   expect((mobileBox?.y || 0) + (mobileBox?.height || 0)).toBeLessThanOrEqual(844)
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBeTruthy()
   await page.screenshot({ path: path.join(screenshotDir, 'chat-multiturn-390.png'), fullPage: true })
+})
+
+test('用户可以停止正在生成的回答', async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 720 })
+  await mockApi(page, 'user', { slowAsk: true })
+  await page.goto('/app/chat')
+
+  const composer = page.locator('.composer')
+  await composer.locator('textarea').fill('请生成一份较长的制度说明')
+  await composer.getByRole('button', { name: '发送' }).click()
+  const stopButton = composer.getByRole('button', { name: '停止' })
+  await expect(stopButton).toBeVisible()
+  await page.screenshot({ path: path.join(screenshotDir, 'chat-stop-active-1440.png'), fullPage: true })
+  await stopButton.click()
+
+  await expect(page.getByText('回答已停止。')).toBeVisible()
+  await expect(composer.getByRole('button', { name: '发送' })).toBeVisible()
+  await expect(stopButton).toBeHidden()
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBeTruthy()
+  await page.screenshot({ path: path.join(screenshotDir, 'chat-stop-completed-1440.png'), fullPage: true })
+
+  await page.setViewportSize({ width: 390, height: 844 })
+  await composer.locator('textarea').fill('请生成一份移动端测试回答')
+  await composer.getByRole('button', { name: '发送' }).click()
+  await expect(stopButton).toBeVisible()
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBeTruthy()
+  await page.screenshot({ path: path.join(screenshotDir, 'chat-stop-active-390.png'), fullPage: true })
+  await stopButton.click()
+  await expect(composer.getByRole('button', { name: '发送' })).toBeVisible()
 })
 
 test('管理员可以查看审计概况和关键操作记录', async ({ page }) => {

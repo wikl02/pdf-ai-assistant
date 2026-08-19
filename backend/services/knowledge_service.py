@@ -12,7 +12,7 @@ from document_loader import (
     safe_collection_name,
     sha256_bytes,
 )
-from llm_client import ask_ai, build_context
+from llm_client import ask_ai, ask_ai_async, build_context
 from text_splitter import split_units_to_chunks
 from vector_store import get_chroma_collection, index_chunks_in_chroma, retrieve_relevant_chunks
 
@@ -65,7 +65,7 @@ def build_knowledge_base(file_infos: list[dict]) -> dict:
     }
 
 
-def answer_question(collection_id: str, question: str) -> dict:
+def _retrieve_question_chunks(collection_id: str, question: str) -> tuple[str, list[dict]]:
     normalized_question = question.strip()
     if not normalized_question:
         raise HTTPException(status_code=400, detail="问题不能为空")
@@ -73,18 +73,39 @@ def answer_question(collection_id: str, question: str) -> dict:
     if collection.count() == 0:
         raise HTTPException(status_code=404, detail="未找到对应知识库，请先上传文档")
     # 先检索再调用大模型，既减少 token 消耗，也避免模型脱离文档自由发挥。
-    relevant_chunks = retrieve_relevant_chunks(collection, normalized_question)
+    return normalized_question, retrieve_relevant_chunks(collection, normalized_question)
+
+
+def _no_relevant_content_result() -> dict:
+    return {
+        "answer": "没有在知识库中检索到与问题相关的内容，因此本次没有调用 AI。",
+        "sources": [],
+        "llm_model": None,
+        "prompt_tokens": 0,
+        "completion_tokens": 0,
+        "total_tokens": 0,
+    }
+
+
+def answer_question(collection_id: str, question: str) -> dict:
+    normalized_question, relevant_chunks = _retrieve_question_chunks(collection_id, question)
     if not relevant_chunks:
         # 没有达到相似度阈值时直接返回，不消耗 DeepSeek 额度。
-        return {
-            "answer": "没有在知识库中检索到与问题相关的内容，因此本次没有调用 AI。",
-            "sources": [],
-            "llm_model": None,
-            "prompt_tokens": 0,
-            "completion_tokens": 0,
-            "total_tokens": 0,
-        }
+        return _no_relevant_content_result()
     llm_result = ask_ai(build_context(relevant_chunks), normalized_question)
+    return {
+        **llm_result,
+        "sources": relevant_chunks,
+    }
+
+
+async def answer_question_async(collection_id: str, question: str) -> dict:
+    """用户聊天使用异步大模型请求，以支持主动停止回答。"""
+
+    normalized_question, relevant_chunks = _retrieve_question_chunks(collection_id, question)
+    if not relevant_chunks:
+        return _no_relevant_content_result()
+    llm_result = await ask_ai_async(build_context(relevant_chunks), normalized_question)
     return {
         **llm_result,
         "sources": relevant_chunks,

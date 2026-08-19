@@ -1,6 +1,8 @@
+import asyncio
 import logging
 from time import perf_counter
 from typing import Annotated
+from uuid import uuid4
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from sqlalchemy.orm import Session
@@ -8,7 +10,12 @@ from sqlalchemy.orm import Session
 from backend.core.audit import audit_event
 from backend.database import get_db
 from backend.dependencies.auth import AdminUser, KnowledgeUser
-from backend.schemas.knowledge import AskRequest, AskResponse, UploadResponse
+from backend.schemas.knowledge import (
+    AskRequest,
+    AskResponse,
+    CancelQuestionResponse,
+    UploadResponse,
+)
 from backend.services.access_control_service import require_collection_permission
 from backend.services.conversation_service import (
     add_assistant_message,
@@ -16,9 +23,15 @@ from backend.services.conversation_service import (
     get_or_create_conversation,
 )
 from backend.services.knowledge_service import (
-    answer_question,
+    answer_question_async,
     build_file_info,
     build_knowledge_base,
+)
+from backend.services.question_task_service import (
+    cancel_question_task,
+    complete_question_task,
+    is_question_task_active,
+    register_question_task,
 )
 
 
@@ -54,11 +67,15 @@ async def upload_documents(
 
 @router.post("/api/chat/ask", response_model=AskResponse)
 @router.post("/ask", response_model=AskResponse, include_in_schema=False)
-def ask_question(
+async def ask_question(
     request: AskRequest,
     current_user: KnowledgeUser,
     db: Annotated[Session, Depends(get_db)],
 ) -> AskResponse:
+    request_id = request.request_id or uuid4().hex
+    if is_question_task_active(current_user.id, request_id):
+        raise HTTPException(status_code=409, detail="该问题正在处理中，请勿重复提交")
+
     knowledge_base = require_collection_permission(
         db, current_user, request.collection_id
     )
@@ -70,10 +87,49 @@ def ask_question(
     )
     user_message = add_user_message(db, conversation, request.question)
     started_at = perf_counter()
+    answer_task = asyncio.create_task(
+        answer_question_async(request.collection_id, request.question)
+    )
+    task_entry = register_question_task(
+        current_user.id,
+        request_id,
+        answer_task,
+        conversation_id=conversation.id,
+        user_message_id=user_message.id,
+    )
     try:
         result = AskResponse.model_validate(
-            answer_question(request.collection_id, request.question)
+            await answer_task
         )
+    except asyncio.CancelledError:
+        elapsed_ms = round((perf_counter() - started_at) * 1000)
+        cancelled_message = add_assistant_message(
+            db,
+            conversation,
+            "回答已停止。",
+            sources=None,
+            response_time_ms=elapsed_ms,
+            status="cancelled",
+        )
+        task_entry.assistant_message_id = cancelled_message.id
+        audit_event(
+            "question_answered",
+            db=db,
+            outcome="cancelled",
+            actor_id=current_user.id,
+            actor_name=current_user.username,
+            conversation_id=conversation.id,
+            knowledge_base_id=knowledge_base.id,
+            request_id=request_id,
+            response_time_ms=elapsed_ms,
+        )
+        complete_question_task(
+            current_user.id,
+            request_id,
+            answer_task,
+            assistant_message_id=cancelled_message.id,
+        )
+        raise HTTPException(status_code=409, detail="回答已停止") from None
     except HTTPException as exc:
         elapsed_ms = round((perf_counter() - started_at) * 1000)
         failure_text = exc.detail if isinstance(exc.detail, str) else "回答生成失败"
@@ -93,9 +149,11 @@ def ask_question(
             actor_name=current_user.username,
             conversation_id=conversation.id,
             knowledge_base_id=knowledge_base.id,
+            request_id=request_id,
             response_time_ms=elapsed_ms,
             error_status=exc.status_code,
         )
+        complete_question_task(current_user.id, request_id, answer_task)
         raise
     except Exception:
         elapsed_ms = round((perf_counter() - started_at) * 1000)
@@ -121,9 +179,11 @@ def ask_question(
             actor_name=current_user.username,
             conversation_id=conversation.id,
             knowledge_base_id=knowledge_base.id,
+            request_id=request_id,
             response_time_ms=elapsed_ms,
             error_status=500,
         )
+        complete_question_task(current_user.id, request_id, answer_task)
         raise HTTPException(status_code=503, detail=failure_text) from None
 
     elapsed_ms = round((perf_counter() - started_at) * 1000)
@@ -146,6 +206,7 @@ def ask_question(
         conversation_id=conversation.id,
         knowledge_base_id=knowledge_base.id,
         collection_id=request.collection_id,
+        request_id=request_id,
         question_length=len(request.question.strip()),
         source_count=len(result.sources),
         response_time_ms=elapsed_ms,
@@ -154,6 +215,12 @@ def ask_question(
         completion_tokens=result.completion_tokens,
         total_tokens=result.total_tokens,
     )
+    complete_question_task(
+        current_user.id,
+        request_id,
+        answer_task,
+        assistant_message_id=assistant_message.id,
+    )
     return result.model_copy(
         update={
             "conversation_id": conversation.id,
@@ -161,3 +228,27 @@ def ask_question(
             "assistant_message_id": assistant_message.id,
         }
     )
+
+
+@router.post(
+    "/api/chat/requests/{request_id}/cancel",
+    response_model=CancelQuestionResponse,
+)
+async def cancel_question(
+    request_id: str,
+    current_user: KnowledgeUser,
+    db: Annotated[Session, Depends(get_db)],
+) -> CancelQuestionResponse:
+    if not 8 <= len(request_id) <= 64:
+        raise HTTPException(status_code=422, detail="请求编号格式无效")
+    result = await cancel_question_task(current_user.id, request_id)
+    audit_event(
+        "question_cancel_requested",
+        db=db,
+        outcome="success" if result["cancelled"] else "ignored",
+        actor_id=current_user.id,
+        actor_name=current_user.username,
+        request_id=request_id,
+        conversation_id=result.get("conversation_id"),
+    )
+    return CancelQuestionResponse.model_validate(result)
